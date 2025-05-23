@@ -37,6 +37,13 @@ def main():
                 # Prevent duplicate walls
                 if not any(w.x == colonist.x and w.y == colonist.y for w in walls):
                     walls.append(Wall(colonist.x, colonist.y))
+            # Attack with 'A' key
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_a:
+                # Attack adjacent zombies (N/S/E/W)
+                for zombie in zombies:
+                    if (abs(zombie.x - colonist.x) == 1 and zombie.y == colonist.y) or \
+                       (abs(zombie.y - colonist.y) == 1 and zombie.x == colonist.x):
+                        zombie.hp -= 50  # Damage value
 
         keys = pygame.key.get_pressed()
         if keys[pygame.K_UP]:
@@ -53,6 +60,9 @@ def main():
             zombie.update(colonist, walls)
             if zombie.x == colonist.x and zombie.y == colonist.y:
                 colonist.hp -= 1
+
+        # Remove dead zombies
+        zombies = [z for z in zombies if z.hp > 0]
 
         # Draw
         screen.fill((50, 50, 50))

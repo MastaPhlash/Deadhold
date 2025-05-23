@@ -11,6 +11,8 @@ Deadhold is a prototype for a zombie-themed colony simulation game inspired by R
 
 ## Controls
 - Arrow keys: Move the colonist (up, down, left, right)
+- Spacebar: Build a wall at colonist's position
+- **A key**: Attack adjacent zombie (N/S/E/W)
 - Close window: Quit the game
 
 ## How to Run
