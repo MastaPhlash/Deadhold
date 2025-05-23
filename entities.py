@@ -121,6 +121,15 @@ class Zombie(Entity):
             for dir_name in ["up", "down", "left", "right"]:
                 if dir_name not in Zombie.images and fallback:
                     Zombie.images[dir_name] = fallback
+            # If still missing any direction, use any loaded image as a last resort
+            for dir_name in ["up", "down", "left", "right"]:
+                if dir_name not in Zombie.images:
+                    for img in Zombie.images.values():
+                        Zombie.images[dir_name] = img
+                        break
+            # Print warning if no image loaded at all
+            if not Zombie.images:
+                print("Warning: No zombie images found. Zombies will be red squares.")
 
     def update(self, target, walls):
         self.move_counter += 1
