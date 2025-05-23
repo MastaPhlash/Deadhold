@@ -1,5 +1,7 @@
 import pygame
 import random
+from entities import Colonist, Zombie
+from hud import draw_hud
 
 # Game settings
 TILE_SIZE = 32
@@ -20,35 +22,9 @@ pygame.display.set_caption("Deadhold Prototype")
 
 clock = pygame.time.Clock()
 
-class Entity:
-    def __init__(self, x, y, color):
-        self.x = x
-        self.y = y
-        self.color = color
-        self.hp = 100
-
-    def draw(self, surface):
-        pygame.draw.rect(surface, self.color, (self.x * TILE_SIZE, self.y * TILE_SIZE, TILE_SIZE, TILE_SIZE))
-
-class Colonist(Entity):
-    def move(self, dx, dy):
-        nx, ny = self.x + dx, self.y + dy
-        if 0 <= nx < MAP_WIDTH and 0 <= ny < MAP_HEIGHT:
-            self.x, self.y = nx, ny
-
-class Zombie(Entity):
-    def update(self, target):
-        # Move toward the colonist
-        dx = target.x - self.x
-        dy = target.y - self.y
-        if abs(dx) > abs(dy):
-            self.x += 1 if dx > 0 else -1 if dx < 0 else 0
-        else:
-            self.y += 1 if dy > 0 else -1 if dy < 0 else 0
-
 def main():
-    colonist = Colonist(MAP_WIDTH // 2, MAP_HEIGHT // 2, GREEN)
-    zombies = [Zombie(random.randint(0, MAP_WIDTH-1), random.randint(0, MAP_HEIGHT-1), RED) for _ in range(3)]
+    colonist = Colonist(MAP_WIDTH // 2, MAP_HEIGHT // 2)
+    zombies = [Zombie(random.randint(0, MAP_WIDTH-1), random.randint(0, MAP_HEIGHT-1)) for _ in range(3)]
 
     running = True
     while running:
@@ -73,14 +49,16 @@ def main():
                 colonist.hp -= 1
 
         # Draw
-        screen.fill(GRAY)
+        screen.fill((50, 50, 50))
         # Draw grid
-        for x in range(MAP_WIDTH):
-            for y in range(MAP_HEIGHT):
-                pygame.draw.rect(screen, WHITE, (x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE), 1)
+        for x in range(20):
+            for y in range(15):
+                pygame.draw.rect(screen, (255, 255, 255), (x*32, y*32, 32, 32), 1)
         colonist.draw(screen)
         for zombie in zombies:
             zombie.draw(screen)
+
+        draw_hud(screen, colonist)
 
         pygame.display.flip()
         clock.tick(5)
