@@ -1,6 +1,6 @@
 import pygame
 import random
-from entities import Colonist, Zombie
+from entities import Colonist, Zombie, Wall
 from hud import draw_hud
 
 # Game settings
@@ -25,12 +25,18 @@ clock = pygame.time.Clock()
 def main():
     colonist = Colonist(MAP_WIDTH // 2, MAP_HEIGHT // 2)
     zombies = [Zombie(random.randint(0, MAP_WIDTH-1), random.randint(0, MAP_HEIGHT-1)) for _ in range(3)]
+    walls = []
 
     running = True
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            # Place wall with spacebar
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                # Prevent duplicate walls
+                if not any(w.x == colonist.x and w.y == colonist.y for w in walls):
+                    walls.append(Wall(colonist.x, colonist.y))
 
         keys = pygame.key.get_pressed()
         if keys[pygame.K_UP]:
@@ -44,7 +50,7 @@ def main():
 
         # Update zombies
         for zombie in zombies:
-            zombie.update(colonist)
+            zombie.update(colonist, walls)
             if zombie.x == colonist.x and zombie.y == colonist.y:
                 colonist.hp -= 1
 
@@ -54,6 +60,9 @@ def main():
         for x in range(20):
             for y in range(15):
                 pygame.draw.rect(screen, (255, 255, 255), (x*32, y*32, 32, 32), 1)
+        # Draw walls
+        for wall in walls:
+            wall.draw(screen)
         colonist.draw(screen)
         for zombie in zombies:
             zombie.draw(screen)
