@@ -38,8 +38,7 @@ Deadhold is a prototype for a zombie-themed colony simulation game inspired by R
 - Dynamic events and research system
 
 ## Credits
-- Prototype code by [Your Name]
-- Inspired by RimWorld (by Ludeon Studios)
+- Prototype code by MastaPhlash
 - Uses [pygame](https://www.pygame.org/)
 
 ## Tips
