@@ -1,11 +1,21 @@
 import pygame
 import os
 
-TILE_SIZE = 32
+TILE_SIZE = 64
 MAP_WIDTH = 200
 MAP_HEIGHT = 150
 
+# Ensure the assets folder exists at this path:
+# x:\Coding\Python\Deadhold-1\assets\
 ASSET_DIR = os.path.join(os.path.dirname(__file__), "assets")
+if not os.path.exists(ASSET_DIR):
+    os.makedirs(ASSET_DIR)
+    # Place your images in this folder:
+    #   colonist.png
+    #   zombie.png
+    #   wall.png
+    #   tree.png
+    #   (optional) facing_indicator.png
 
 GREEN = (0, 200, 0)
 RED = (200, 0, 0)
@@ -15,7 +25,23 @@ TREE_COLOR = (34, 139, 34)
 
 def load_image(filename):
     path = os.path.join(ASSET_DIR, filename)
-    return pygame.image.load(path).convert_alpha()
+    try:
+        img = pygame.image.load(path).convert_alpha()
+        img = pygame.transform.smoothscale(img, (TILE_SIZE, TILE_SIZE))
+        return img
+    except Exception:
+        return None
+
+def get_direction_name(dx, dy):
+    if dx == 0 and dy == -1:
+        return "up"
+    elif dx == 0 and dy == 1:
+        return "down"
+    elif dx == -1 and dy == 0:
+        return "left"
+    elif dx == 1 and dy == 0:
+        return "right"
+    return "down"  # Default
 
 class Entity:
     image = None  # To be set in subclasses
@@ -33,14 +59,23 @@ class Entity:
             pygame.draw.rect(surface, self.color, (self.x * TILE_SIZE - cam_x, self.y * TILE_SIZE - cam_y, TILE_SIZE, TILE_SIZE))
 
 class Colonist(Entity):
-    image = None
+    images = {}
     facing_indicator = None
 
     def __init__(self, x, y):
         super().__init__(x, y, GREEN)
         self.facing = (0, -1)  # Default facing up (dx, dy)
-        if Colonist.image is None:
-            Colonist.image = load_image("colonist.png")
+        # Load directional images once
+        if not Colonist.images:
+            for dir_name in ["up", "down", "left", "right"]:
+                img = load_image(f"colonist_{dir_name}.png")
+                if img:
+                    Colonist.images[dir_name] = img
+            # Fallback to colonist.png if directional missing
+            fallback = load_image("colonist.png")
+            for dir_name in ["up", "down", "left", "right"]:
+                if dir_name not in Colonist.images and fallback:
+                    Colonist.images[dir_name] = fallback
         if Colonist.facing_indicator is None:
             try:
                 Colonist.facing_indicator = load_image("facing_indicator.png")
@@ -61,31 +96,31 @@ class Colonist(Entity):
             self.x, self.y = nx, ny
 
     def draw(self, surface, cam_x=0, cam_y=0):
-        super().draw(surface, cam_x, cam_y)
-        # Draw facing indicator (small arrow or yellow square)
-        fx, fy = self.facing
-        if fx != 0 or fy != 0:
-            cx = self.x * TILE_SIZE + TILE_SIZE // 2 - cam_x
-            cy = self.y * TILE_SIZE + TILE_SIZE // 2 - cam_y
-            offset_x = fx * (TILE_SIZE // 4)
-            offset_y = fy * (TILE_SIZE // 4)
-            if Colonist.facing_indicator:
-                surface.blit(Colonist.facing_indicator, (cx + offset_x - 8, cy + offset_y - 8))
-            else:
-                pygame.draw.rect(
-                    surface,
-                    (255, 255, 0),
-                    (cx + offset_x - 4, cy + offset_y - 4, 8, 8)
-                )
+        # Draw directional image
+        dir_name = get_direction_name(*self.facing)
+        img = Colonist.images.get(dir_name)
+        if img:
+            surface.blit(img, (self.x * TILE_SIZE - cam_x, self.y * TILE_SIZE - cam_y))
+        else:
+            super().draw(surface, cam_x, cam_y)
 
 class Zombie(Entity):
-    image = None
+    images = {}
 
     def __init__(self, x, y):
         super().__init__(x, y, RED)
         self.move_counter = 0
-        if Zombie.image is None:
-            Zombie.image = load_image("zombie.png")
+        self.facing = (0, 1)  # Default facing down
+        # Load directional images once
+        if not Zombie.images:
+            for dir_name in ["up", "down", "left", "right"]:
+                img = load_image(f"zombie_{dir_name}.png")
+                if img:
+                    Zombie.images[dir_name] = img
+            fallback = load_image("zombie.png")
+            for dir_name in ["up", "down", "left", "right"]:
+                if dir_name not in Zombie.images and fallback:
+                    Zombie.images[dir_name] = fallback
 
     def update(self, target, walls):
         self.move_counter += 1
@@ -93,10 +128,19 @@ class Zombie(Entity):
             dx = target.x - self.x
             dy = target.y - self.y
             nx, ny = self.x, self.y
+            # Determine facing direction for image
             if abs(dx) > abs(dy):
-                nx += 1 if dx > 0 else -1 if dx < 0 else 0
+                if dx > 0:
+                    self.facing = (1, 0)
+                elif dx < 0:
+                    self.facing = (-1, 0)
+                nx += self.facing[0]
             else:
-                ny += 1 if dy > 0 else -1 if dy < 0 else 0
+                if dy > 0:
+                    self.facing = (0, 1)
+                elif dy < 0:
+                    self.facing = (0, -1)
+                ny += self.facing[1]
             # Check for wall collision
             wall = next((w for w in walls if w.x == nx and w.y == ny), None)
             if wall:
@@ -105,7 +149,12 @@ class Zombie(Entity):
                 self.x, self.y = nx, ny
 
     def draw(self, surface, cam_x=0, cam_y=0):
-        super().draw(surface, cam_x, cam_y)
+        dir_name = get_direction_name(*self.facing)
+        img = Zombie.images.get(dir_name)
+        if img:
+            surface.blit(img, (self.x * TILE_SIZE - cam_x, self.y * TILE_SIZE - cam_y))
+        else:
+            super().draw(surface, cam_x, cam_y)
         # Draw zombie HP bar
         if self.hp < 100:
             bar_width = int(TILE_SIZE * (self.hp / 100))
