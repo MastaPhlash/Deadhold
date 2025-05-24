@@ -108,10 +108,10 @@ class Colonist(Entity):
             # Always update facing direction immediately
             self.facing = pressed_direction
             
-            # Only move if key has been held for a few frames (about 0.3 seconds at 5 FPS)
+            # Only move if key has been held for more than 1 frame (faster response)
             for key, direction in directions.items():
                 if keys[key] and direction == pressed_direction:
-                    if self.key_hold_time[key] > 2:  # Held for more than 2 frames
+                    if self.key_hold_time[key] > 1:  # Reduced from 2 to 1 for faster movement
                         return direction
             
         return (0, 0)  # No movement, just facing change
@@ -144,7 +144,7 @@ class Zombie(Entity):
     def __init__(self, x, y):
         super().__init__(x, y, RED)
         self.move_counter = 0
-        self.facing = (0, 1)  # Default facing down
+        self.facing = (0, 1)
         # Load directional images once
         if not Zombie.images:
             for dir_name in ["up", "down", "left", "right"]:
@@ -168,9 +168,11 @@ class Zombie(Entity):
     def update(self, target, walls):
         self.move_counter += 1
         if self.move_counter % 4 == 0:  # Move only every 4 frames
+            # Always calculate movement toward target (removed optimization that was breaking AI)
             dx = target.x - self.x
             dy = target.y - self.y
             nx, ny = self.x, self.y
+            
             # Determine facing direction for image
             if abs(dx) > abs(dy):
                 if dx > 0:
@@ -184,12 +186,15 @@ class Zombie(Entity):
                 elif dy < 0:
                     self.facing = (0, -1)
                 ny += self.facing[1]
+            
             # Check for wall collision
-            wall = next((w for w in walls if w.x == nx and w.y == ny), None)
-            if wall:
-                wall.damage(25)  # Zombie damages wall if blocked
-            else:
-                self.x, self.y = nx, ny
+            for wall in walls:
+                if wall.x == nx and wall.y == ny:
+                    wall.damage(25)
+                    return  # Don't move, just damage wall
+            
+            # Move if no collision
+            self.x, self.y = nx, ny
 
     def draw(self, surface, cam_x=0, cam_y=0):
         dir_name = get_direction_name(*self.facing)

@@ -188,6 +188,10 @@ def main():
     # Camera variables must be initialized before the loop
     cam_x = colonist.x * TILE_SIZE - SCREEN_WIDTH // 2 + TILE_SIZE // 2
     cam_y = colonist.y * TILE_SIZE - SCREEN_HEIGHT // 2 + TILE_SIZE // 2
+    
+    # Pre-calculate screen tile dimensions
+    SCREEN_TILES_X = SCREEN_WIDTH // TILE_SIZE + 2  # +2 for partial tiles
+    SCREEN_TILES_Y = SCREEN_HEIGHT // TILE_SIZE + 2
 
     while running:
         if not pause_game:
@@ -419,96 +423,92 @@ def main():
 
         # Skip game updates if paused
         if pause_game:
-            # Still handle rendering
-            pass
-        else:
-            # Combat systems
-            CombatSystem.update_turrets(turrets, zombies, bullets, Bullet)
-            CombatSystem.update_bullets(bullets, zombies, MAP_WIDTH, MAP_HEIGHT)
-            CombatSystem.update_spikes(spikes, zombies)
+            # Only draw pause indicator, skip everything else
+            font = pygame.font.SysFont(None, 48)
+            pause_text = font.render("PAUSED (P to resume)", True, (255, 255, 0))
+            screen.blit(pause_text, (SCREEN_WIDTH // 2 - pause_text.get_width() // 2, SCREEN_HEIGHT // 2))
+            pygame.display.flip()
+            clock.tick(FPS)
+            continue
 
-            # Update zombies
-            for zombie in zombies:
-                zombie.update(colonist, walls + impassable + spikes + turrets + [d for d in doors if not d.open])
-                if zombie.x == colonist.x and zombie.y == colonist.y:
-                    colonist.hp -= 1
-                    stats.increment("damage_taken", 1)
+        # Optimize camera calculations - only update when colonist moves
+        new_cam_x = colonist.x * TILE_SIZE - SCREEN_WIDTH // 2 + TILE_SIZE // 2
+        new_cam_y = colonist.y * TILE_SIZE - SCREEN_HEIGHT // 2 + TILE_SIZE // 2
+        if new_cam_x != cam_x or new_cam_y != cam_y:
+            cam_x = max(0, min(new_cam_x, MAP_WIDTH * TILE_SIZE - SCREEN_WIDTH))
+            cam_y = max(0, min(new_cam_y, MAP_HEIGHT * TILE_SIZE - SCREEN_HEIGHT))
 
-            # Cleanup and XP with statistics
-            zombies_to_remove = [z for z in zombies if z.hp <= 0]
-            for zombie in zombies_to_remove:
-                if (zombie.x, zombie.y) not in last_zombie_killed:
-                    xp += 5
-                    stats.increment("zombies_killed")
-                    last_zombie_killed.add((zombie.x, zombie.y))
+        # Optimized drawing - only draw visible tiles
+        start_tile_x = max(0, cam_x // TILE_SIZE)
+        start_tile_y = max(0, cam_y // TILE_SIZE)
+        end_tile_x = min(MAP_WIDTH, start_tile_x + SCREEN_TILES_X)
+        end_tile_y = min(MAP_HEIGHT, start_tile_y + SCREEN_TILES_Y)
 
-            # Count trees and rocks cut/mined for stats before removing them
-            cut_trees = [t for t in trees if t.cut_down]
-            for t in cut_trees:
-                stats.increment("trees_cut")
-                stats.increment("wood_gathered", 2)
-            mined_rocks = [r for r in rocks if r.mined]
-            for r in mined_rocks:
-                stats.increment("rocks_mined")
-                stats.increment("stone_gathered", 2)
-
-            zombies = [z for z in zombies if z.hp > 0]
-            walls = [w for w in walls if w.hp > 0]
-            spikes = [s for s in spikes if s.hp > 0]
-            turrets = [t for t in turrets if t.hp > 0]
-            doors = [d for d in doors if d.hp > 0]
-
-            # Remove cut trees and mined rocks from the lists
-            trees = [t for t in trees if not t.cut_down]
-            rocks = [r for r in rocks if not r.mined]
-
-            # Update minimap
-            minimap.update(MAP_WIDTH, MAP_HEIGHT, colonist, zombies, walls, trees, rocks)
-
-        # Level up
-        xp, level, skill_points, xp_to_next, _ = ExperienceSystem.check_level_up(xp, level, skill_points, xp_to_next)
-
-        # Camera scroll (no smoothing, always center on colonist)
-        cam_x = colonist.x * TILE_SIZE - SCREEN_WIDTH // 2 + TILE_SIZE // 2
-        cam_y = colonist.y * TILE_SIZE - SCREEN_HEIGHT // 2 + TILE_SIZE // 2
-        cam_x = max(0, min(cam_x, MAP_WIDTH * TILE_SIZE - SCREEN_WIDTH))
-        cam_y = max(0, min(cam_y, MAP_HEIGHT * TILE_SIZE - SCREEN_HEIGHT))
-
-        # Draw
+        # Draw background tiles efficiently
         screen.fill((50, 50, 50))
-        for x in range(SCREEN_WIDTH // TILE_SIZE):
-            for y in range(SCREEN_HEIGHT // TILE_SIZE):
-                wx = x + cam_x // TILE_SIZE
-                wy = y + cam_y // TILE_SIZE
-                if 0 <= wx < MAP_WIDTH and 0 <= wy < MAP_HEIGHT:
-                    # Draw floor tile if present, else grass
-                    if (wx, wy) in floors and floor_img:
-                        screen.blit(floor_img, (x*TILE_SIZE, y*TILE_SIZE))
-                    elif grass_img:
-                        screen.blit(grass_img, (x*TILE_SIZE, y*TILE_SIZE))
-                    else:
-                        pygame.draw.rect(screen, (34, 139, 34), (x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE))
-        for rock in rocks:
+        for wx in range(start_tile_x, end_tile_x):
+            for wy in range(start_tile_y, end_tile_y):
+                screen_x = wx * TILE_SIZE - cam_x
+                screen_y = wy * TILE_SIZE - cam_y
+                
+                # Draw floor tile if present, else grass
+                if (wx, wy) in floors and floor_img:
+                    screen.blit(floor_img, (screen_x, screen_y))
+                elif grass_img:
+                    screen.blit(grass_img, (screen_x, screen_y))
+                else:
+                    pygame.draw.rect(screen, (34, 139, 34), (screen_x, screen_y, TILE_SIZE, TILE_SIZE))
+
+        # Optimized entity drawing - pre-filter entities by viewport
+        def is_on_screen(entity):
+            return (start_tile_x - 1 <= entity.x <= end_tile_x and 
+                    start_tile_y - 1 <= entity.y <= end_tile_y)
+
+        # Draw entities in proper order, only if visible
+        # Only draw rocks and trees that haven't been harvested
+        visible_rocks = [r for r in rocks if is_on_screen(r) and not r.mined]
+        visible_walls = [w for w in walls if is_on_screen(w)]
+        visible_spikes = [s for s in spikes if is_on_screen(s)]
+        visible_turrets = [t for t in turrets if is_on_screen(t)]
+        visible_doors = [d for d in doors if is_on_screen(d)]
+        visible_zombies = [z for z in zombies if is_on_screen(z)]
+        visible_bullets = [b for b in bullets if is_on_screen(b)]
+        
+        # Trees need special handling for 2-tile height - only draw uncut trees
+        visible_trees = [t for t in trees if start_tile_x - 1 <= t.x <= end_tile_x and 
+                        start_tile_y - 2 <= t.y <= end_tile_y and not t.cut_down]
+
+        for rock in visible_rocks:
             rock.draw(screen, cam_x, cam_y)
-        for wall in walls:
+        for wall in visible_walls:
             wall.draw(screen, cam_x, cam_y)
-        for spike in spikes:
+        for spike in visible_spikes:
             spike.draw(screen, cam_x, cam_y)
-        for turret in turrets:
+        for turret in visible_turrets:
             turret.draw(screen, cam_x, cam_y)
-        for bullet in bullets:
+        for bullet in visible_bullets:
             bullet.draw(screen, cam_x, cam_y)
-        for tree in trees:
-            covered = (tree.x == colonist.x and tree.y - 1 == colonist.y) or any(tree.x == z.x and tree.y - 1 == z.y for z in zombies)
+        
+        # Draw trees behind entities first
+        for tree in visible_trees:
+            covered = (tree.x == colonist.x and tree.y - 1 == colonist.y) or \
+                     any(tree.x == z.x and tree.y - 1 == z.y for z in visible_zombies)
             if not covered:
                 tree.draw(screen, cam_x, cam_y)
-        for door in doors:
+        
+        for door in visible_doors:
             door.draw(screen, cam_x, cam_y)
+        
+        # Always draw colonist (assuming they're always on screen)
         colonist.draw(screen, cam_x, cam_y)
-        for zombie in zombies:
+        
+        for zombie in visible_zombies:
             zombie.draw(screen, cam_x, cam_y)
-        for tree in trees:
-            covered = (tree.x == colonist.x and tree.y - 1 == colonist.y) or any(tree.x == z.x and tree.y - 1 == z.y for z in zombies)
+        
+        # Draw trees in front of entities
+        for tree in visible_trees:
+            covered = (tree.x == colonist.x and tree.y - 1 == colonist.y) or \
+                     any(tree.x == z.x and tree.y - 1 == z.y for z in visible_zombies)
             if covered:
                 tree.draw(screen, cam_x, cam_y)
 
@@ -564,6 +564,46 @@ def main():
         # Controls popup
         if show_controls:
             draw_controls_popup(screen, SCREEN_WIDTH, SCREEN_HEIGHT)
+
+        # Combat systems
+        CombatSystem.update_turrets(turrets, zombies, bullets, Bullet)
+        CombatSystem.update_bullets(bullets, zombies, MAP_WIDTH, MAP_HEIGHT)
+        CombatSystem.update_spikes(spikes, zombies)
+
+        # Update zombies
+        for zombie in zombies:
+            zombie.update(colonist, walls + impassable + spikes + turrets + [d for d in doors if not d.open])
+            if zombie.x == colonist.x and zombie.y == colonist.y:
+                colonist.hp -= 1
+                stats.increment("damage_taken", 1)
+
+        # Cleanup and XP with statistics
+        zombies_to_remove = [z for z in zombies if z.hp <= 0]
+        for zombie in zombies_to_remove:
+            if (zombie.x, zombie.y) not in last_zombie_killed:
+                xp += 5
+                stats.increment("zombies_killed")
+                last_zombie_killed.add((zombie.x, zombie.y))
+
+        # Remove dead entities
+        zombies = [z for z in zombies if z.hp > 0]
+        walls = [w for w in walls if w.hp > 0]
+        spikes = [s for s in spikes if s.hp > 0]
+        turrets = [t for t in turrets if t.hp > 0]
+        doors = [d for d in doors if d.hp > 0]
+
+        # Count trees and rocks cut/mined for stats before removing them
+        cut_trees = [t for t in trees if t.cut_down]
+        for t in cut_trees:
+            stats.increment("trees_cut")
+            stats.increment("wood_gathered", 2)
+        mined_rocks = [r for r in rocks if r.mined]
+        for r in mined_rocks:
+            stats.increment("rocks_mined")
+            stats.increment("stone_gathered", 2)
+
+        # Update minimap with all trees/rocks (it handles cut_down/mined internally)
+        minimap.update(MAP_WIDTH, MAP_HEIGHT, colonist, zombies, walls, trees, rocks)
 
         pygame.display.flip()
         clock.tick(FPS)

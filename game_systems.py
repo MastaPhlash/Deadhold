@@ -129,19 +129,29 @@ class ExperienceSystem:
 class CombatSystem:
     @staticmethod
     def update_turrets(turrets, zombies, bullets, Bullet):
-        """Handle turret AI and shooting"""
+        """Optimized turret AI with spatial optimization"""
+        # Pre-filter zombies that are alive
+        alive_zombies = [z for z in zombies if z.hp > 0]
+        
         for turret in turrets:
             if turret.hp <= 0 or turret.cooldown > 0:
                 if turret.cooldown > 0:
                     turret.cooldown -= 1
                 continue
             
-            # Find nearest zombie in range
+            # Quick distance check - only consider zombies within rough range first
+            nearby_zombies = [z for z in alive_zombies 
+                            if abs(z.x - turret.x) <= 5 and abs(z.y - turret.y) <= 5]
+            
+            if not nearby_zombies:
+                continue
+                
+            # Find nearest zombie in exact range
             min_dist = 999
             target_z = None
-            for z in zombies:
+            for z in nearby_zombies:
                 dist = abs(z.x - turret.x) + abs(z.y - turret.y)
-                if dist <= 5 and dist < min_dist and z.hp > 0:
+                if dist <= 5 and dist < min_dist:
                     min_dist = dist
                     target_z = z
             
@@ -160,9 +170,12 @@ class CombatSystem:
 
     @staticmethod
     def update_bullets(bullets, zombies, MAP_WIDTH, MAP_HEIGHT):
-        """Update bullet movement and collision"""
+        """Optimized bullet collision detection"""
+        alive_zombies = [z for z in zombies if z.hp > 0]
+        
         for bullet in bullets[:]:
             bullet.update()
+            
             # Remove if out of bounds or expired
             if (bullet.x < 0 or bullet.y < 0 or 
                 bullet.x >= MAP_WIDTH or bullet.y >= MAP_HEIGHT or 
@@ -170,26 +183,39 @@ class CombatSystem:
                 bullets.remove(bullet)
                 continue
             
-            # Check zombie hits
-            for z in zombies:
-                if z.x == bullet.x and z.y == bullet.y and z.hp > 0:
+            # Optimized collision - only check nearby zombies
+            hit = False
+            for z in alive_zombies:
+                if z.x == bullet.x and z.y == bullet.y:
                     z.hp -= 50
                     bullets.remove(bullet)
+                    hit = True
                     break
+            
+            if hit:
+                break
 
     @staticmethod
     def update_spikes(spikes, zombies):
-        """Handle spike trap damage"""
+        """Optimized spike damage with spatial optimization"""
+        alive_zombies = [z for z in zombies if z.hp > 0]
+        
+        # Create a position lookup for faster collision detection
+        zombie_positions = {(z.x, z.y): z for z in alive_zombies}
+        
         for spike in spikes:
-            for z in zombies:
-                if z.x == spike.x and z.y == spike.y and z.hp > 0:
-                    z.hp -= 10
+            if spike.hp <= 0:
+                continue
+            zombie = zombie_positions.get((spike.x, spike.y))
+            if zombie:
+                zombie.hp -= 10
 
 class MinimapSystem:
     def __init__(self, minimap_size=150):
         self.size = minimap_size
-        self.scale = 1  # Will be calculated based on map size
+        self.scale = 1
         self.surface = None
+        self.update_counter = 0  # Only update every few frames
         
     def initialize(self, MAP_WIDTH, MAP_HEIGHT):
         self.scale = max(MAP_WIDTH // self.size, MAP_HEIGHT // self.size, 1)
@@ -200,38 +226,51 @@ class MinimapSystem:
     def update(self, MAP_WIDTH, MAP_HEIGHT, colonist, zombies, walls, trees, rocks):
         if not self.surface:
             return
+        
+        # Only update minimap every 5 frames for performance
+        self.update_counter += 1
+        if self.update_counter % 5 != 0:
+            return
             
-        self.surface.fill((20, 40, 20))  # Dark green background
+        self.surface.fill((20, 40, 20))
+        
+        # Batch set pixels for better performance
+        pixels_to_set = []
         
         # Draw terrain features
         for tree in trees:
             if not tree.cut_down:
                 px, py = tree.x // self.scale, tree.y // self.scale
                 if 0 <= px < self.surface.get_width() and 0 <= py < self.surface.get_height():
-                    self.surface.set_at((px, py), (0, 150, 0))  # Green for trees
+                    pixels_to_set.append(((px, py), (0, 150, 0)))
                     
         for rock in rocks:
             if not rock.mined:
                 px, py = rock.x // self.scale, rock.y // self.scale
                 if 0 <= px < self.surface.get_width() and 0 <= py < self.surface.get_height():
-                    self.surface.set_at((px, py), (100, 100, 100))  # Gray for rocks
+                    pixels_to_set.append(((px, py), (100, 100, 100)))
                     
         for wall in walls:
             px, py = wall.x // self.scale, wall.y // self.scale
             if 0 <= px < self.surface.get_width() and 0 <= py < self.surface.get_height():
-                self.surface.set_at((px, py), (120, 120, 120))  # Light gray for walls
+                pixels_to_set.append(((px, py), (120, 120, 120)))
         
-        # Draw zombies
-        for zombie in zombies:
+        # Draw zombies (only nearby ones for performance)
+        nearby_zombies = [z for z in zombies if abs(z.x - colonist.x) < 50 and abs(z.y - colonist.y) < 50]
+        for zombie in nearby_zombies:
             px, py = zombie.x // self.scale, zombie.y // self.scale
             if 0 <= px < self.surface.get_width() and 0 <= py < self.surface.get_height():
-                self.surface.set_at((px, py), (200, 0, 0))  # Red for zombies
+                pixels_to_set.append(((px, py), (200, 0, 0)))
                 
-        # Draw colonist (always on top)
+        # Set all pixels at once
+        for pos, color in pixels_to_set:
+            self.surface.set_at(pos, color)
+        
+        # Draw colonist last (always on top)
         cx, cy = colonist.x // self.scale, colonist.y // self.scale
         if 0 <= cx < self.surface.get_width() and 0 <= cy < self.surface.get_height():
-            self.surface.set_at((cx, cy), (0, 255, 0))  # Bright green for colonist
-    
+            self.surface.set_at((cx, cy), (0, 255, 0))
+
     def draw(self, screen, SCREEN_WIDTH, SCREEN_HEIGHT, position="topright"):
         if self.surface:
             if position == "bottomright":
