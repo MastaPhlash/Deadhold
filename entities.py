@@ -61,7 +61,6 @@ class Entity:
 
 class Colonist(Entity):
     images = {}
-    facing_indicator = None
 
     def __init__(self, x, y):
         super().__init__(x, y, GREEN)
@@ -79,11 +78,6 @@ class Colonist(Entity):
             for dir_name in ["up", "down", "left", "right"]:
                 if dir_name not in Colonist.images and fallback:
                     Colonist.images[dir_name] = fallback
-        if Colonist.facing_indicator is None:
-            try:
-                Colonist.facing_indicator = load_image("facing_indicator.png")
-            except Exception:
-                Colonist.facing_indicator = None
 
     def update_movement(self, keys):
         """Update movement based on key states, allowing quick taps to change facing only"""

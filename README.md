@@ -76,6 +76,12 @@ Deadhold is a prototype for a zombie-themed colony simulation game inspired by R
 
 For the new blueprints and researchable items, add these PNG files to your `assets` folder:
 
+- `colonist.png` (Main character)
+- `zombie.png` (Enemies)
+- `tree.png` (Trees - should be 64x128 pixels tall)
+- `rock.png` (Rocks)
+- `grass.png` (Ground texture)
+- `floor.png` (Building floors)
 - `wall.png` (Wood Wall)
 - `stone_wall.png` (Stone Wall)
 - `spike.png` (Spike Trap)
@@ -86,7 +92,7 @@ For the new blueprints and researchable items, add these PNG files to your `asse
 - `workbench.png` (Workbench)
 - `trap_pit.png` (Trap Pit)
 
-**All images should be 64x64 pixels.**
+**All images should be 64x64 pixels, except tree.png which should be 64x128 pixels.**
 
 Place these files in:
 ```
