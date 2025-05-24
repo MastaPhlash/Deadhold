@@ -25,17 +25,6 @@ def draw_hud(surface, colonist, wood, stone, build_img=None):
     pygame.draw.rect(surface, (100, 100, 100), (10, 30, hp_bar_width, 8))
     pygame.draw.rect(surface, hp_color, (10, 30, int(hp_bar_width * hp_percentage), 8))
     
-    # Controls help
-    font2 = pygame.font.SysFont(None, 22)
-    controls = [
-        "WASD/Arrows: Move  A: Action  Space: Build  TAB: Cycle",
-        "R: Research  E: Use Door  F5: Save  F9: Load"
-    ]
-    
-    for i, control in enumerate(controls):
-        text = font2.render(control, True, (180, 180, 180))
-        surface.blit(text, (10, 45 + i * 20))
-    
     # Build preview with enhanced info
     if build_img:
         preview_x = surface.get_width() - 150

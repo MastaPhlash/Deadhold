@@ -163,6 +163,7 @@ def main():
     # UI state
     show_stats = False
     pause_game = False
+    show_controls = False  # New: controls popup
     auto_save_timer = 0
     AUTO_SAVE_INTERVAL = FPS * 300  # Auto-save every 5 minutes
     
@@ -183,7 +184,11 @@ def main():
     last_build_positions = set()
 
     running = True
-    
+
+    # Camera variables must be initialized before the loop
+    cam_x = colonist.x * TILE_SIZE - SCREEN_WIDTH // 2 + TILE_SIZE // 2
+    cam_y = colonist.y * TILE_SIZE - SCREEN_HEIGHT // 2 + TILE_SIZE // 2
+
     while running:
         if not pause_game:
             # Update game systems
@@ -216,6 +221,8 @@ def main():
                     pause_game = not pause_game
                 elif event.key == pygame.K_TAB and pygame.key.get_pressed()[pygame.K_LSHIFT]:  # Shift+Tab for stats
                     show_stats = not show_stats
+                elif event.key == pygame.K_h:  # Show/hide controls popup
+                    show_controls = not show_controls
                 elif event.key == pygame.K_b:  # Toggle construction planning
                     construction_planner.toggle_planning_mode()
                 elif event.key == pygame.K_c and construction_planner.planning_mode:  # Clear all plans
@@ -398,15 +405,10 @@ def main():
 
         # Movement (walls, closed doors, rocks, and trees block; open doors do not)
         keys = pygame.key.get_pressed()
-        dx, dy = 0, 0
-        if keys[pygame.K_UP]:
-            dx, dy = 0, -1
-        elif keys[pygame.K_DOWN]:
-            dx, dy = 0, 1
-        elif keys[pygame.K_LEFT]:
-            dx, dy = -1, 0
-        elif keys[pygame.K_RIGHT]:
-            dx, dy = 1, 0
+        
+        # Use the new movement system that handles quick taps vs held keys
+        dx, dy = colonist.update_movement(keys)
+        
         if dx != 0 or dy != 0:
             # Block by walls, closed doors, uncut trees, and unmined rocks
             block_walls = [w for w in walls]
@@ -511,23 +513,11 @@ def main():
                 tree.draw(screen, cam_x, cam_y)
 
         # Draw QoL overlays
-        minimap.draw(screen, SCREEN_WIDTH, SCREEN_HEIGHT)
+        minimap.draw(screen, SCREEN_WIDTH, SCREEN_HEIGHT, position="bottomright")
         construction_planner.draw_plans(screen, cam_x, cam_y, load_image, TILE_SIZE)
         
         if show_stats:
             stats.draw_stats_overlay(screen, SCREEN_WIDTH, SCREEN_HEIGHT)
-        
-        # Draw pause indicator
-        if pause_game:
-            font = pygame.font.SysFont(None, 48)
-            pause_text = font.render("PAUSED (P to resume)", True, (255, 255, 0))
-            screen.blit(pause_text, (SCREEN_WIDTH // 2 - pause_text.get_width() // 2, SCREEN_HEIGHT // 2))
-
-        # Draw planning mode indicator
-        if construction_planner.planning_mode:
-            font = pygame.font.SysFont(None, 24)
-            plan_text = font.render("PLANNING MODE (B to toggle, C to clear)", True, (255, 255, 0))
-            screen.blit(plan_text, (10, SCREEN_HEIGHT - 30))
 
         # Build preview in HUD
         build_img = None
@@ -571,14 +561,71 @@ def main():
             text = font.render(hint, True, (200, 200, 200))
             screen.blit(text, (10, SCREEN_HEIGHT - 70 + i * 20))
 
+        # Controls popup
+        if show_controls:
+            draw_controls_popup(screen, SCREEN_WIDTH, SCREEN_HEIGHT)
+
         pygame.display.flip()
         clock.tick(FPS)
 
+        # Place this check at the very end of the while loop, after pygame.display.flip()
         if colonist.hp <= 0:
             print("Colonist died!")
+            # Wait for a moment so the user can see the message
+            pygame.time.wait(1500)
             running = False
 
     pygame.quit()
 
+def draw_controls_popup(screen, SCREEN_WIDTH, SCREEN_HEIGHT):
+    font = pygame.font.SysFont(None, 28)
+    font2 = pygame.font.SysFont(None, 22)
+    controls = [
+        "Controls:",
+        "Arrows/WASD: Move",
+        "A: Action (attack/harvest/open door)",
+        "Space: Build   TAB: Cycle Build   R: Research",
+        "E: Use Door   F5: Save   F9: Load   Esc: Quit",
+        "P: Pause   B: Plan Mode   C: Clear Plans",
+        "Shift+Tab: Stats   H: Toggle Controls Popup"
+    ]
+    popup_width = 420
+    popup_height = 40 + 32 * len(controls)
+    # Center the popup, but move it up if it would overlap the minimap in the bottom right
+    popup_x = (SCREEN_WIDTH - popup_width) // 2
+    popup_y = (SCREEN_HEIGHT - popup_height) // 2
+
+    # If the popup would overlap the minimap (bottom right), move it up a bit
+    minimap_margin = 10
+    minimap_height = 0
+    # Try to get minimap height from MinimapSystem if possible
+    try:
+        minimap = None
+        for obj in globals().values():
+            if hasattr(obj, "surface") and hasattr(obj, "draw"):
+                minimap = obj
+                break
+        if minimap and hasattr(minimap, "surface") and minimap.surface:
+            minimap_height = minimap.surface.get_height()
+    except Exception:
+        minimap_height = 0
+    # If popup would overlap minimap, move it up
+    if popup_y + popup_height > SCREEN_HEIGHT - minimap_margin - minimap_height:
+        popup_y = SCREEN_HEIGHT - minimap_margin - minimap_height - popup_height - 10
+        if popup_y < 0:
+            popup_y = 10
+
+    overlay = pygame.Surface((popup_width, popup_height))
+    overlay.fill((30, 30, 40))
+    overlay.set_alpha(230)
+    screen.blit(overlay, (popup_x, popup_y))
+    title = font.render("Key Commands", True, (255, 255, 0))
+    screen.blit(title, (popup_x + 20, popup_y + 10))
+    for i, line in enumerate(controls):
+        text = font2.render(line, True, (200, 200, 200))
+        screen.blit(text, (popup_x + 20, popup_y + 50 + i * 32))
+
 if __name__ == "__main__":
     main()
+
+

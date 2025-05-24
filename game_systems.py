@@ -232,13 +232,15 @@ class MinimapSystem:
         if 0 <= cx < self.surface.get_width() and 0 <= cy < self.surface.get_height():
             self.surface.set_at((cx, cy), (0, 255, 0))  # Bright green for colonist
     
-    def draw(self, screen, SCREEN_WIDTH, SCREEN_HEIGHT):
+    def draw(self, screen, SCREEN_WIDTH, SCREEN_HEIGHT, position="topright"):
         if self.surface:
-            # Position minimap in top-right corner
-            x = SCREEN_WIDTH - self.surface.get_width() - 10
-            y = 10
+            if position == "bottomright":
+                x = SCREEN_WIDTH - self.surface.get_width() - 10
+                y = SCREEN_HEIGHT - self.surface.get_height() - 10
+            else:
+                x = SCREEN_WIDTH - self.surface.get_width() - 10
+                y = 10
             screen.blit(self.surface, (x, y))
-            # Draw border
             pygame.draw.rect(screen, (255, 255, 255), 
                            (x-1, y-1, self.surface.get_width()+2, self.surface.get_height()+2), 1)
 

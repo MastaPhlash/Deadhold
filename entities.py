@@ -66,6 +66,8 @@ class Colonist(Entity):
     def __init__(self, x, y):
         super().__init__(x, y, GREEN)
         self.facing = (0, -1)  # Default facing up (dx, dy)
+        self.movement_delay = 0  # Delay before movement starts
+        self.key_hold_time = {}  # Track how long each direction key is held
         # Load directional images once
         if not Colonist.images:
             for dir_name in ["up", "down", "left", "right"]:
@@ -83,11 +85,48 @@ class Colonist(Entity):
             except Exception:
                 Colonist.facing_indicator = None
 
+    def update_movement(self, keys):
+        """Update movement based on key states, allowing quick taps to change facing only"""
+        # Check which direction keys are pressed
+        directions = {
+            pygame.K_UP: (0, -1),
+            pygame.K_DOWN: (0, 1),
+            pygame.K_LEFT: (-1, 0),
+            pygame.K_RIGHT: (1, 0)
+        }
+        
+        pressed_direction = None
+        for key, direction in directions.items():
+            if keys[key]:
+                pressed_direction = direction
+                # Track how long this key has been held
+                if key not in self.key_hold_time:
+                    self.key_hold_time[key] = 0
+                self.key_hold_time[key] += 1
+                break
+        
+        # Clear hold times for keys that aren't pressed
+        for key in list(self.key_hold_time.keys()):
+            if not keys[key]:
+                del self.key_hold_time[key]
+        
+        if pressed_direction:
+            # Always update facing direction immediately
+            self.facing = pressed_direction
+            
+            # Only move if key has been held for a few frames (about 0.3 seconds at 5 FPS)
+            for key, direction in directions.items():
+                if keys[key] and direction == pressed_direction:
+                    if self.key_hold_time[key] > 2:  # Held for more than 2 frames
+                        return direction
+            
+        return (0, 0)  # No movement, just facing change
+
     def move(self, dx, dy, walls, trees_and_rocks):
+        if dx == 0 and dy == 0:
+            return
+            
         nx, ny = self.x + dx, self.y + dy
-        # Always update facing if a direction is pressed
-        if dx != 0 or dy != 0:
-            self.facing = (dx, dy)
         if 0 <= nx < MAP_WIDTH and 0 <= ny < MAP_HEIGHT:
             # Prevent moving into walls, uncut trees, or unmined rocks
             if any(w.x == nx and w.y == ny for w in walls):
