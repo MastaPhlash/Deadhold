@@ -175,24 +175,34 @@ class Zombie(Entity):
             )
 
 class Wall:
-    image = None
+    images = {}
 
-    def __init__(self, x, y):
+    def __init__(self, x, y, wall_type="wood"):
         self.x = x
         self.y = y
-        self.color = WALL_COLOR
-        self.hp = 100
-        if Wall.image is None:
-            Wall.image = load_image("wall.png")
+        self.type = wall_type  # "wood" or "stone"
+        if self.type == "stone":
+            self.color = (150, 150, 150)
+            self.hp = 300
+            img_name = "stone_wall.png"
+        else:
+            self.color = WALL_COLOR
+            self.hp = 100
+            img_name = "wall.png"
+        # Load images for both wall types
+        if img_name not in Wall.images:
+            Wall.images[img_name] = load_image(img_name)
+        self.image = Wall.images[img_name]
 
     def draw(self, surface, cam_x=0, cam_y=0):
-        if Wall.image:
-            surface.blit(Wall.image, (self.x * TILE_SIZE - cam_x, self.y * TILE_SIZE - cam_y))
+        if self.image:
+            surface.blit(self.image, (self.x * TILE_SIZE - cam_x, self.y * TILE_SIZE - cam_y))
         else:
             pygame.draw.rect(surface, self.color, (self.x * TILE_SIZE - cam_x, self.y * TILE_SIZE - cam_y, TILE_SIZE, TILE_SIZE))
         # Draw wall HP bar
-        if self.hp < 100:
-            bar_width = int(TILE_SIZE * (self.hp / 100))
+        if self.hp < (300 if self.type == "stone" else 100):
+            max_hp = 300 if self.type == "stone" else 100
+            bar_width = int(TILE_SIZE * (self.hp / max_hp))
             pygame.draw.rect(surface, (255, 0, 0), (self.x * TILE_SIZE - cam_x, self.y * TILE_SIZE - cam_y + TILE_SIZE - 6, bar_width, 5))
 
     def damage(self, amount):
@@ -269,3 +279,58 @@ class Rock:
     def damage(self, amount):
         # Rocks are not damaged by zombies, so do nothing
         pass
+
+class Spike:
+    image = None
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.hp = 50
+        if Spike.image is None:
+            Spike.image = load_image("spike.png")
+
+    def draw(self, surface, cam_x=0, cam_y=0):
+        if Spike.image:
+            surface.blit(Spike.image, (self.x * TILE_SIZE - cam_x, self.y * TILE_SIZE - cam_y))
+        else:
+            pygame.draw.rect(surface, (180, 120, 60), (self.x * TILE_SIZE - cam_x + 8, self.y * TILE_SIZE - cam_y + 8, TILE_SIZE - 16, TILE_SIZE - 16))
+
+    def damage(self, amount):
+        self.hp -= amount
+
+class Turret:
+    image = None
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.hp = 100
+        self.cooldown = 0
+        if Turret.image is None:
+            Turret.image = load_image("turret.png")
+
+    def draw(self, surface, cam_x=0, cam_y=0):
+        if Turret.image:
+            surface.blit(Turret.image, (self.x * TILE_SIZE - cam_x, self.y * TILE_SIZE - cam_y))
+        else:
+            pygame.draw.rect(surface, (100, 100, 255), (self.x * TILE_SIZE - cam_x + 8, self.y * TILE_SIZE - cam_y + 8, TILE_SIZE - 16, TILE_SIZE - 16))
+
+    def damage(self, amount):
+        self.hp -= amount
+
+class Bullet:
+    def __init__(self, x, y, dx, dy):
+        self.x = x
+        self.y = y
+        self.dx = dx
+        self.dy = dy
+        self.timer = 0  # For bullet lifetime
+
+    def update(self):
+        self.x += self.dx
+        self.y += self.dy
+        self.timer += 1
+
+    def draw(self, surface, cam_x=0, cam_y=0):
+        pygame.draw.circle(surface, (255, 255, 0), (self.x * TILE_SIZE + TILE_SIZE // 2 - cam_x, self.y * TILE_SIZE + TILE_SIZE // 2 - cam_y), 8)

@@ -27,7 +27,8 @@ class SaveGame:
         return {
             "x": wall.x,
             "y": wall.y,
-            "hp": wall.hp
+            "hp": wall.hp,
+            "type": getattr(wall, "type", "wood")
         }
 
     @staticmethod
@@ -47,7 +48,8 @@ class SaveGame:
         }
 
     @classmethod
-    def save(cls, colonist, zombies, walls, trees, wood, rocks=None, stone=0):
+    def save(cls, colonist, zombies, walls, trees, wood, rocks=None, stone=0,
+             xp=0, level=1, skill_points=0, xp_to_next=10, unlocked_blueprints=None, selected_blueprint_idx=0):
         try:
             data = {
                 "colonist": cls.serialize_colonist(colonist),
@@ -56,7 +58,13 @@ class SaveGame:
                 "trees": [cls.serialize_tree(t) for t in trees],
                 "rocks": [cls.serialize_rock(r) for r in (rocks or [])],
                 "wood": wood,
-                "stone": stone
+                "stone": stone,
+                "xp": xp,
+                "level": level,
+                "skill_points": skill_points,
+                "xp_to_next": xp_to_next,
+                "unlocked_blueprints": list(unlocked_blueprints) if unlocked_blueprints else [],
+                "selected_blueprint_idx": selected_blueprint_idx
             }
             with open(SAVE_FILE, "w") as f:
                 json.dump(data, f)
@@ -83,8 +91,10 @@ class SaveGame:
             return None
 
 # For backward compatibility with existing code
-def save_game(colonist, zombies, walls, trees, wood, rocks=None, stone=0):
-    return SaveGame.save(colonist, zombies, walls, trees, wood, rocks, stone)
+def save_game(colonist, zombies, walls, trees, wood, rocks=None, stone=0,
+              xp=0, level=1, skill_points=0, xp_to_next=10, unlocked_blueprints=None, selected_blueprint_idx=0):
+    return SaveGame.save(colonist, zombies, walls, trees, wood, rocks, stone,
+                         xp, level, skill_points, xp_to_next, unlocked_blueprints, selected_blueprint_idx)
 
 def load_game():
     return SaveGame.load()
