@@ -1,4 +1,5 @@
 import random
+import pygame
 from entities import Tree, Rock, Wall, Door
 
 class MapGenerator:
@@ -183,3 +184,183 @@ class CombatSystem:
             for z in zombies:
                 if z.x == spike.x and z.y == spike.y and z.hp > 0:
                     z.hp -= 10
+
+class MinimapSystem:
+    def __init__(self, minimap_size=150):
+        self.size = minimap_size
+        self.scale = 1  # Will be calculated based on map size
+        self.surface = None
+        
+    def initialize(self, MAP_WIDTH, MAP_HEIGHT):
+        self.scale = max(MAP_WIDTH // self.size, MAP_HEIGHT // self.size, 1)
+        minimap_w = MAP_WIDTH // self.scale
+        minimap_h = MAP_HEIGHT // self.scale
+        self.surface = pygame.Surface((minimap_w, minimap_h))
+        
+    def update(self, MAP_WIDTH, MAP_HEIGHT, colonist, zombies, walls, trees, rocks):
+        if not self.surface:
+            return
+            
+        self.surface.fill((20, 40, 20))  # Dark green background
+        
+        # Draw terrain features
+        for tree in trees:
+            if not tree.cut_down:
+                px, py = tree.x // self.scale, tree.y // self.scale
+                if 0 <= px < self.surface.get_width() and 0 <= py < self.surface.get_height():
+                    self.surface.set_at((px, py), (0, 150, 0))  # Green for trees
+                    
+        for rock in rocks:
+            if not rock.mined:
+                px, py = rock.x // self.scale, rock.y // self.scale
+                if 0 <= px < self.surface.get_width() and 0 <= py < self.surface.get_height():
+                    self.surface.set_at((px, py), (100, 100, 100))  # Gray for rocks
+                    
+        for wall in walls:
+            px, py = wall.x // self.scale, wall.y // self.scale
+            if 0 <= px < self.surface.get_width() and 0 <= py < self.surface.get_height():
+                self.surface.set_at((px, py), (120, 120, 120))  # Light gray for walls
+        
+        # Draw zombies
+        for zombie in zombies:
+            px, py = zombie.x // self.scale, zombie.y // self.scale
+            if 0 <= px < self.surface.get_width() and 0 <= py < self.surface.get_height():
+                self.surface.set_at((px, py), (200, 0, 0))  # Red for zombies
+                
+        # Draw colonist (always on top)
+        cx, cy = colonist.x // self.scale, colonist.y // self.scale
+        if 0 <= cx < self.surface.get_width() and 0 <= cy < self.surface.get_height():
+            self.surface.set_at((cx, cy), (0, 255, 0))  # Bright green for colonist
+    
+    def draw(self, screen, SCREEN_WIDTH, SCREEN_HEIGHT):
+        if self.surface:
+            # Position minimap in top-right corner
+            x = SCREEN_WIDTH - self.surface.get_width() - 10
+            y = 10
+            screen.blit(self.surface, (x, y))
+            # Draw border
+            pygame.draw.rect(screen, (255, 255, 255), 
+                           (x-1, y-1, self.surface.get_width()+2, self.surface.get_height()+2), 1)
+
+class ConstructionPlanningSystem:
+    def __init__(self):
+        self.planning_mode = False
+        self.planned_buildings = []  # List of (x, y, blueprint_name)
+        
+    def toggle_planning_mode(self):
+        self.planning_mode = not self.planning_mode
+        
+    def add_planned_building(self, x, y, blueprint_name):
+        # Remove existing plan at this location
+        self.planned_buildings = [(px, py, bp) for px, py, bp in self.planned_buildings if px != x or py != y]
+        self.planned_buildings.append((x, y, blueprint_name))
+        
+    def remove_planned_building(self, x, y):
+        self.planned_buildings = [(px, py, bp) for px, py, bp in self.planned_buildings if px != x or py != y]
+        
+    def clear_all_plans(self):
+        self.planned_buildings.clear()
+        
+    def get_plan_at(self, x, y):
+        for px, py, bp in self.planned_buildings:
+            if px == x and py == y:
+                return bp
+        return None
+        
+    def draw_plans(self, screen, cam_x, cam_y, load_image_func, TILE_SIZE):
+        if not self.planning_mode:
+            return
+            
+        # Simple fallback for now - just draw colored rectangles
+        for x, y, blueprint_name in self.planned_buildings:
+            screen_x = x * TILE_SIZE - cam_x
+            screen_y = y * TILE_SIZE - cam_y
+            
+            # Only draw if on screen
+            if -TILE_SIZE <= screen_x <= screen.get_width() and -TILE_SIZE <= screen_y <= screen.get_height():
+                # Draw semi-transparent colored rectangle
+                s = pygame.Surface((TILE_SIZE, TILE_SIZE))
+                s.fill((100, 100, 255))
+                s.set_alpha(128)
+                screen.blit(s, (screen_x, screen_y))
+
+class JobSystem:
+    def __init__(self):
+        self.job_queue = []  # List of jobs to be done
+        self.priorities = {
+            "mining": 3,
+            "woodcutting": 3,
+            "construction": 2,
+            "hauling": 1
+        }
+        
+    def add_job(self, job_type, x, y, priority=None):
+        if priority is None:
+            priority = self.priorities.get(job_type, 1)
+        self.job_queue.append({
+            "type": job_type,
+            "x": x,
+            "y": y,
+            "priority": priority,
+            "assigned": False
+        })
+        # Sort by priority (higher first)
+        self.job_queue.sort(key=lambda j: j["priority"], reverse=True)
+        
+    def get_next_job(self):
+        for job in self.job_queue:
+            if not job["assigned"]:
+                job["assigned"] = True
+                return job
+        return None
+        
+    def complete_job(self, job):
+        if job in self.job_queue:
+            self.job_queue.remove(job)
+            
+    def cancel_job(self, x, y):
+        self.job_queue = [j for j in self.job_queue if j["x"] != x or j["y"] != y]
+
+class GameStatistics:
+    def __init__(self):
+        self.stats = {
+            "zombies_killed": 0,
+            "trees_cut": 0,
+            "rocks_mined": 0,
+            "buildings_built": 0,
+            "wood_gathered": 0,
+            "stone_gathered": 0,
+            "days_survived": 0,
+            "damage_taken": 0,
+            "start_time": pygame.time.get_ticks()
+        }
+        
+    def increment(self, stat_name, amount=1):
+        if stat_name in self.stats:
+            self.stats[stat_name] += amount
+            
+    def get_playtime_minutes(self):
+        return (pygame.time.get_ticks() - self.stats["start_time"]) // 60000
+        
+    def draw_stats_overlay(self, screen, SCREEN_WIDTH, SCREEN_HEIGHT):
+        font = pygame.font.SysFont(None, 24)
+        y_offset = 100
+        
+        # Create semi-transparent background
+        overlay = pygame.Surface((250, 200))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(180)
+        screen.blit(overlay, (SCREEN_WIDTH - 260, y_offset))
+        
+        stats_to_show = [
+            ("Days Survived", self.stats["days_survived"]),
+            ("Zombies Killed", self.stats["zombies_killed"]),
+            ("Trees Cut", self.stats["trees_cut"]),
+            ("Rocks Mined", self.stats["rocks_mined"]),
+            ("Buildings Built", self.stats["buildings_built"]),
+            ("Playtime", f"{self.get_playtime_minutes()}m")
+        ]
+        
+        for i, (label, value) in enumerate(stats_to_show):
+            text = font.render(f"{label}: {value}", True, (255, 255, 255))
+            screen.blit(text, (SCREEN_WIDTH - 250, y_offset + 10 + i * 25))

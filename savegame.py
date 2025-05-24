@@ -123,9 +123,11 @@ class SaveGame:
 
 # For backward compatibility with existing code
 def save_game(colonist, zombies, walls, trees, wood, rocks=None, stone=0,
-              xp=0, level=1, skill_points=0, xp_to_next=10, unlocked_blueprints=None, selected_blueprint_idx=0):
+              xp=0, level=1, skill_points=0, xp_to_next=10, unlocked_blueprints=None, selected_blueprint_idx=0,
+              spikes=None, turrets=None, doors=None, floors=None):
     return SaveGame.save(colonist, zombies, walls, trees, wood, rocks, stone,
-                         xp, level, skill_points, xp_to_next, unlocked_blueprints, selected_blueprint_idx)
+                         xp, level, skill_points, xp_to_next, unlocked_blueprints, selected_blueprint_idx,
+                         spikes, turrets, doors, floors)
 
 def load_game():
     return SaveGame.load()

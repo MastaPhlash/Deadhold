@@ -8,8 +8,8 @@ Deadhold is a prototype for a zombie-themed colony simulation game inspired by R
 - Tile-based map with grid movement
 - Player-controlled colonist
 - Zombies that chase the colonist
-- Trees that can be cut for wood (resource)
-- Rocks that can be mined for stone (resource)
+- Trees that can be cut for wood (resource) **and block movement until cut**
+- Rocks that can be mined for stone (resource) **and block movement until mined**
 - Walls require wood or stone to build (stone walls are 3x stronger)
 - **Day and night cycle**
 - Simple health and collision mechanics
@@ -21,6 +21,8 @@ Deadhold is a prototype for a zombie-themed colony simulation game inspired by R
 - Many researchable items: walls, doors, traps, turrets, campfire, workbench, trap pit, and more
 - Research can be done in any order
 - Doors can be built and opened/closed with the **E** key
+- **Camera always centers on colonist for responsive movement**
+- **Harvesting resources is always possible when facing a tree or rock**
 
 ## Controls
 - Arrow keys: Move the colonist (up, down, left, right) and set facing direction
@@ -33,6 +35,8 @@ Deadhold is a prototype for a zombie-themed colony simulation game inspired by R
 - **Escape**: Quit the game or close research menu
 - Close window: Quit the game
 - **E**: Open/close a door when standing on it
+- **You cannot walk through trees or rocks until they are harvested.**
+- **Camera instantly follows colonist (no lag).**
 
 ## How to Run
 1. Install Python 3.x
@@ -60,7 +64,8 @@ Deadhold is a prototype for a zombie-themed colony simulation game inspired by R
 - Your colonist attacks only in the direction they are facing (indicated by a yellow square).
 - You must have wood to build walls. Attack trees to gather wood.
 - Attack rocks to gather stone. Stone will be used for advanced building in the future.
-- The camera scrolls to keep your colonist centered as you explore the huge map.
+- **You cannot walk through trees or rocks until you harvest them.**
+- The camera scrolls to keep your colonist centered as you explore the huge map, with no lag.
 - Press **F5** to save and **F9** to load your game at any time.
 - The game alternates between day and night. At night, the world is darker.
 - Gain XP by chopping trees, mining rocks, and killing zombies. Level up to earn skill points.

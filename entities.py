@@ -83,16 +83,16 @@ class Colonist(Entity):
             except Exception:
                 Colonist.facing_indicator = None
 
-    def move(self, dx, dy, walls, trees):
+    def move(self, dx, dy, walls, trees_and_rocks):
         nx, ny = self.x + dx, self.y + dy
         # Always update facing if a direction is pressed
         if dx != 0 or dy != 0:
             self.facing = (dx, dy)
         if 0 <= nx < MAP_WIDTH and 0 <= ny < MAP_HEIGHT:
-            # Prevent moving into walls or trees
+            # Prevent moving into walls, uncut trees, or unmined rocks
             if any(w.x == nx and w.y == ny for w in walls):
                 return
-            if any(t.x == nx and t.y == ny for t in trees):
+            if any((t.x == nx and t.y == ny) for t in trees_and_rocks):
                 return
             self.x, self.y = nx, ny
 

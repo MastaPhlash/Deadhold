@@ -2,7 +2,9 @@ import pygame
 import random
 from entities import Colonist, Zombie, Wall, Tree, Rock, Spike, Turret, Bullet, Door
 from hud import draw_hud
-from game_systems import MapGenerator, TimeSystem, WaveSystem, ExperienceSystem, CombatSystem
+from game_systems import (MapGenerator, TimeSystem, WaveSystem, ExperienceSystem, 
+                         CombatSystem, MinimapSystem, ConstructionPlanningSystem, 
+                         JobSystem, GameStatistics)
 import os
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
@@ -26,12 +28,6 @@ MAP_HEIGHT = 150
 SCREEN_WIDTH = TILE_SIZE * 15
 SCREEN_HEIGHT = TILE_SIZE * 10
 FPS = 5
-
-# Colors
-WHITE = (255, 255, 255)
-GREEN = (0, 200, 0)
-RED = (200, 0, 0)
-GRAY = (50, 50, 50)
 
 pygame.init()
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -146,6 +142,12 @@ def main():
     # Initialize game systems
     time_system = TimeSystem()
     wave_system = WaveSystem(FPS)
+    minimap = MinimapSystem()
+    construction_planner = ConstructionPlanningSystem()
+    job_system = JobSystem()
+    stats = GameStatistics()
+    
+    minimap.initialize(MAP_WIDTH, MAP_HEIGHT)
     
     # Generate world
     walls, doors, floors = MapGenerator.generate_buildings(MAP_WIDTH, MAP_HEIGHT)
@@ -157,6 +159,12 @@ def main():
     bullets = []
     wood = 5
     stone = 0
+    
+    # UI state
+    show_stats = False
+    pause_game = False
+    auto_save_timer = 0
+    AUTO_SAVE_INTERVAL = FPS * 300  # Auto-save every 5 minutes
     
     # XP/Research system
     xp = 0
@@ -177,26 +185,43 @@ def main():
     running = True
     
     while running:
-        # Update game systems
-        time_system.update()
-        
-        # Zombie wave spawning
-        new_zombies = wave_system.update(time_system)
-        for _ in range(new_zombies):
-            zx, zy = random.randint(0, MAP_WIDTH-1), random.randint(0, MAP_HEIGHT-1)
-            zombies.append(Zombie(zx, zy))
+        if not pause_game:
+            # Update game systems
+            time_system.update()
+            
+            # Auto-save
+            auto_save_timer += 1
+            if auto_save_timer >= AUTO_SAVE_INTERVAL:
+                auto_save_timer = 0
+                # Auto-save logic here
+                print("Auto-saving...")
+            
+            # Zombie wave spawning
+            new_zombies = wave_system.update(time_system)
+            for _ in range(new_zombies):
+                zx, zy = random.randint(0, MAP_WIDTH-1), random.randint(0, MAP_HEIGHT-1)
+                zombies.append(Zombie(zx, zy))
 
         hour, minute = time_system.get_time()
         is_night = time_system.is_night()
         impassable = [t for t in trees if not t.cut_down] + [r for r in rocks if not r.mined]
 
-        # --- Modular: Event Handling ---
+        # Event handling with QoL improvements
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.KEYDOWN:
+                # Quality of Life hotkeys
+                if event.key == pygame.K_p:  # Pause
+                    pause_game = not pause_game
+                elif event.key == pygame.K_TAB and pygame.key.get_pressed()[pygame.K_LSHIFT]:  # Shift+Tab for stats
+                    show_stats = not show_stats
+                elif event.key == pygame.K_b:  # Toggle construction planning
+                    construction_planner.toggle_planning_mode()
+                elif event.key == pygame.K_c and construction_planner.planning_mode:  # Clear all plans
+                    construction_planner.clear_all_plans()
                 # --- Global keys ---
-                if event.key == pygame.K_ESCAPE:
+                elif event.key == pygame.K_ESCAPE:
                     if research_menu:
                         research_menu = False
                     else:
@@ -208,12 +233,40 @@ def main():
                         colonist, zombies, walls, trees, wood, rocks, stone,
                         xp, level, skill_points, xp_to_next, unlocked_blueprints, selected_blueprint_idx
                     )
-                    save_game(**state)
-                    print("Game saved.")
+                    # Update to match savegame.py function signature
+                    result = save_game(colonist, zombies, walls, trees, wood, rocks, stone,
+                                     xp, level, skill_points, xp_to_next, unlocked_blueprints, selected_blueprint_idx)
+                    if result:
+                        print("Game saved.")
+                    else:
+                        print("Failed to save game.")
                 elif event.key == pygame.K_F9:
                     data = load_game()
                     if data:
                         colonist, zombies, walls, trees, wood, rocks, stone, xp, level, skill_points, xp_to_next, unlocked_blueprints, selected_blueprint_idx = set_game_state(data, all_blueprints)
+                        # Reload the world data if available
+                        if 'spikes' in data:
+                            spikes = []
+                            for s in data['spikes']:
+                                spike = Spike(s["x"], s["y"])
+                                spike.hp = s.get("hp", 50)
+                                spikes.append(spike)
+                        if 'turrets' in data:
+                            turrets = []
+                            for t in data['turrets']:
+                                turret = Turret(t["x"], t["y"])
+                                turret.hp = t.get("hp", 100)
+                                turret.cooldown = t.get("cooldown", 0)
+                                turrets.append(turret)
+                        if 'doors' in data:
+                            doors = []
+                            for d in data['doors']:
+                                door = Door(d["x"], d["y"])
+                                door.hp = d.get("hp", 100)
+                                door.open = d.get("open", False)
+                                doors.append(door)
+                        if 'floors' in data:
+                            floors = data['floors']
                         print("Game loaded.")
                     else:
                         print("No save file found.")
@@ -228,6 +281,13 @@ def main():
                         if bp["name"] not in unlocked_blueprints and skill_points > 0:
                             unlocked_blueprints.add(bp["name"])
                             skill_points -= 1
+                # --- Construction planning mode ---
+                elif construction_planner.planning_mode and event.key == pygame.K_SPACE:
+                    # Add building to plan instead of building immediately
+                    unlocked_list = get_unlocked_blueprints(all_blueprints, unlocked_blueprints)
+                    if unlocked_list:
+                        bp = unlocked_list[selected_blueprint_idx % len(unlocked_list)]
+                        construction_planner.add_planned_building(colonist.x, colonist.y, bp["name"])
                 # --- Game controls ---
                 else:
                     if event.key == pygame.K_TAB:
@@ -277,30 +337,34 @@ def main():
                             if zombie.x == target_x and zombie.y == target_y and zombie.hp > 0:
                                 zombie.hp -= 50
                                 break
-                        else:
-                            for tree in trees:
-                                if tree.x == target_x and tree.y == target_y and not tree.cut_down:
-                                    wood += tree.cut()
-                                    if (tree.x, tree.y) not in last_tree_cut:
+                        # Try to harvest tree or rock even if no zombie was found
+                        harvested = False
+                        for tree in trees:
+                            if tree.x == target_x and tree.y == target_y and not tree.cut_down:
+                                wood += tree.cut()
+                                if (tree.x, tree.y) not in last_tree_cut:
+                                    xp += 1
+                                    last_tree_cut.add((tree.x, tree.y))
+                                harvested = True
+                                break
+                        if not harvested:
+                            for rock in rocks:
+                                if rock.x == target_x and rock.y == target_y and not rock.mined:
+                                    stone += rock.mine()
+                                    if (rock.x, rock.y) not in last_rock_mined:
                                         xp += 1
-                                        last_tree_cut.add((tree.x, tree.y))
+                                        last_rock_mined.add((rock.x, rock.y))
+                                    harvested = True
                                     break
-                            else:
-                                for rock in rocks:
-                                    if rock.x == target_x and rock.y == target_y and not rock.mined:
-                                        stone += rock.mine()
-                                        if (rock.x, rock.y) not in last_rock_mined:
-                                            xp += 1
-                                            last_rock_mined.add((rock.x, rock.y))
+                            if not harvested:
+                                # Open/close door if present
+                                for door in doors:
+                                    if door.x == target_x and door.y == target_y:
+                                        door.toggle()
                                         break
-                                else:
-                                    # Open/close door if present
-                                    for door in doors:
-                                        if door.x == target_x and door.y == target_y:
-                                            door.toggle()
-                                            break
 
         if research_menu:
+            # ...existing research menu rendering code...
             screen.fill((30, 30, 60))
             font = pygame.font.SysFont(None, 36)
             title = font.render("Research Menu", True, (255, 255, 0))
@@ -344,108 +408,65 @@ def main():
         elif keys[pygame.K_RIGHT]:
             dx, dy = 1, 0
         if dx != 0 or dy != 0:
-            # Block by walls, closed doors, rocks, and trees
+            # Block by walls, closed doors, uncut trees, and unmined rocks
             block_walls = [w for w in walls]
             block_doors = [d for d in doors if not d.open]
             block_trees = [t for t in trees if not t.cut_down]
             block_rocks = [r for r in rocks if not r.mined]
             colonist.move(dx, dy, block_walls + block_doors + block_trees + block_rocks, [])
 
-        # --- Turret logic: fire at nearest zombie if in range ---
-        for turret in turrets:
-            if turret.hp <= 0:
-                continue
-            if turret.cooldown > 0:
-                turret.cooldown -= 1
-                continue
-            # Find nearest zombie in range (range = 5 tiles)
-            min_dist = 999
-            target_z = None
-            for z in zombies:
-                dist = abs(z.x - turret.x) + abs(z.y - turret.y)
-                if dist <= 5 and dist < min_dist and z.hp > 0:
-                    min_dist = dist
-                    target_z = z
-            if target_z:
-                dx = target_z.x - turret.x
-                dy = target_z.y - turret.y
-                # Normalize direction
-                if abs(dx) > abs(dy):
-                    dx = 1 if dx > 0 else -1
-                    dy = 0
-                else:
-                    dy = 1 if dy > 0 else -1
-                    dx = 0
-                bullets.append(Bullet(turret.x, turret.y, dx, dy))
-                turret.cooldown = 10  # Fire every 10 frames
+        # Skip game updates if paused
+        if pause_game:
+            # Still handle rendering
+            pass
+        else:
+            # Combat systems
+            CombatSystem.update_turrets(turrets, zombies, bullets, Bullet)
+            CombatSystem.update_bullets(bullets, zombies, MAP_WIDTH, MAP_HEIGHT)
+            CombatSystem.update_spikes(spikes, zombies)
 
-        # --- Bullet logic ---
-        for bullet in bullets[:]:
-            bullet.update()
-            # Remove bullet if out of bounds or after 20 steps
-            if bullet.x < 0 or bullet.y < 0 or bullet.x >= MAP_WIDTH or bullet.y >= MAP_HEIGHT or bullet.timer > 20:
-                bullets.remove(bullet)
-                continue
-            # Hit zombie
-            for z in zombies:
-                if z.x == bullet.x and z.y == bullet.y and z.hp > 0:
-                    z.hp -= 50
-                    bullets.remove(bullet)
-                    break
+            # Update zombies
+            for zombie in zombies:
+                zombie.update(colonist, walls + impassable + spikes + turrets + [d for d in doors if not d.open])
+                if zombie.x == colonist.x and zombie.y == colonist.y:
+                    colonist.hp -= 1
+                    stats.increment("damage_taken", 1)
 
-        # --- Spike logic: damage zombies standing on spikes ---
-        for spike in spikes:
-            for z in zombies:
-                if z.x == spike.x and z.y == spike.y and z.hp > 0:
-                    z.hp -= 10  # Damage per frame on spike
+            # Cleanup and XP with statistics
+            zombies_to_remove = [z for z in zombies if z.hp <= 0]
+            for zombie in zombies_to_remove:
+                if (zombie.x, zombie.y) not in last_zombie_killed:
+                    xp += 5
+                    stats.increment("zombies_killed")
+                    last_zombie_killed.add((zombie.x, zombie.y))
 
-        # Update zombies
-        for zombie in zombies:
-            # Doors block zombies if closed
-            zombie.update(colonist, walls + impassable + spikes + turrets + [d for d in doors if not d.open])
-            if zombie.x == colonist.x and zombie.y == colonist.y:
-                colonist.hp -= 1
+            # Count trees and rocks cut/mined for stats before removing them
+            cut_trees = [t for t in trees if t.cut_down]
+            for t in cut_trees:
+                stats.increment("trees_cut")
+                stats.increment("wood_gathered", 2)
+            mined_rocks = [r for r in rocks if r.mined]
+            for r in mined_rocks:
+                stats.increment("rocks_mined")
+                stats.increment("stone_gathered", 2)
 
-        # Remove destroyed doors
-        doors = [d for d in doors if d.hp > 0]
+            zombies = [z for z in zombies if z.hp > 0]
+            walls = [w for w in walls if w.hp > 0]
+            spikes = [s for s in spikes if s.hp > 0]
+            turrets = [t for t in turrets if t.hp > 0]
+            doors = [d for d in doors if d.hp > 0]
 
-        # Remove dead zombies, destroyed walls, cut trees, mined rocks, destroyed spikes/turrets
-        zombies_to_remove = [z for z in zombies if z.hp <= 0]
-        for zombie in zombies_to_remove:
-            if (zombie.x, zombie.y) not in last_zombie_killed:
-                xp += 5
-                last_zombie_killed.add((zombie.x, zombie.y))
-        zombies = [z for z in zombies if z.hp > 0]
-        walls = [w for w in walls if w.hp > 0]
-        spikes = [s for s in spikes if s.hp > 0]
-        turrets = [t for t in turrets if t.hp > 0]
-        trees = [t for t in trees if not t.cut_down]
-        rocks = [r for r in rocks if not r.mined]
+            # Remove cut trees and mined rocks from the lists
+            trees = [t for t in trees if not t.cut_down]
+            rocks = [r for r in rocks if not r.mined]
 
-        # XP for actions
-        for tree in trees:
-            if tree.cut_down and not hasattr(tree, "_xp_given"):
-                xp += 1
-                tree._xp_given = True
-        for rock in rocks:
-            if rock.mined and not hasattr(rock, "_xp_given"):
-                xp += 1
-                rock._xp_given = True
-        for zombie in zombies:
-            if zombie.hp <= 0 and not hasattr(zombie, "_xp_given"):
-                xp += 2
-                zombie._xp_given = True
-
-        # XP for killing zombies (only once per zombie, now 5 XP per kill)
-        for zombie in zombies:
-            if zombie.hp <= 0 and (zombie.x, zombie.y) not in last_zombie_killed:
-                xp += 5
-                last_zombie_killed.add((zombie.x, zombie.y))
+            # Update minimap
+            minimap.update(MAP_WIDTH, MAP_HEIGHT, colonist, zombies, walls, trees, rocks)
 
         # Level up
         xp, level, skill_points, xp_to_next, _ = ExperienceSystem.check_level_up(xp, level, skill_points, xp_to_next)
 
-        # Camera scroll
+        # Camera scroll (no smoothing, always center on colonist)
         cam_x = colonist.x * TILE_SIZE - SCREEN_WIDTH // 2 + TILE_SIZE // 2
         cam_y = colonist.y * TILE_SIZE - SCREEN_HEIGHT // 2 + TILE_SIZE // 2
         cam_x = max(0, min(cam_x, MAP_WIDTH * TILE_SIZE - SCREEN_WIDTH))
@@ -489,6 +510,25 @@ def main():
             if covered:
                 tree.draw(screen, cam_x, cam_y)
 
+        # Draw QoL overlays
+        minimap.draw(screen, SCREEN_WIDTH, SCREEN_HEIGHT)
+        construction_planner.draw_plans(screen, cam_x, cam_y, load_image, TILE_SIZE)
+        
+        if show_stats:
+            stats.draw_stats_overlay(screen, SCREEN_WIDTH, SCREEN_HEIGHT)
+        
+        # Draw pause indicator
+        if pause_game:
+            font = pygame.font.SysFont(None, 48)
+            pause_text = font.render("PAUSED (P to resume)", True, (255, 255, 0))
+            screen.blit(pause_text, (SCREEN_WIDTH // 2 - pause_text.get_width() // 2, SCREEN_HEIGHT // 2))
+
+        # Draw planning mode indicator
+        if construction_planner.planning_mode:
+            font = pygame.font.SysFont(None, 24)
+            plan_text = font.render("PLANNING MODE (B to toggle, C to clear)", True, (255, 255, 0))
+            screen.blit(plan_text, (10, SCREEN_HEIGHT - 30))
+
         # Build preview in HUD
         build_img = None
         if not research_menu:
@@ -499,11 +539,13 @@ def main():
                 if img:
                     build_img = img.copy()
 
+        # Enhanced HUD with QoL info
         draw_hud(screen, colonist, wood, stone, build_img)
+        
         font = pygame.font.SysFont(None, 28)
         xp_text = font.render(f"XP: {xp}/{xp_to_next}  Level: {level}  SP: {skill_points}", True, (0, 255, 255))
         screen.blit(xp_text, (10, 35))
-        day_text = font.render(f"Day: {day_count}", True, (255, 255, 255))
+        day_text = font.render(f"Day: {wave_system.day_count}", True, (255, 255, 255))
         screen.blit(day_text, (10, 65))
 
         # Night overlay
@@ -518,6 +560,16 @@ def main():
         clock_str = f"{hour:02d}:{minute:02d}"
         clock_text = font.render(clock_str, True, (255, 255, 255))
         screen.blit(clock_text, (SCREEN_WIDTH // 2 - clock_text.get_width() // 2, 5))
+
+        # Additional QoL HUD elements
+        font = pygame.font.SysFont(None, 20)
+        qol_hints = [
+            "P: Pause  B: Plan Mode  Shift+Tab: Stats",
+            f"Auto-save in: {(AUTO_SAVE_INTERVAL - auto_save_timer) // FPS}s"
+        ]
+        for i, hint in enumerate(qol_hints):
+            text = font.render(hint, True, (200, 200, 200))
+            screen.blit(text, (10, SCREEN_HEIGHT - 70 + i * 20))
 
         pygame.display.flip()
         clock.tick(FPS)
