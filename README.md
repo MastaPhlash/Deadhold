@@ -18,6 +18,9 @@ Deadhold is a prototype for a zombie-themed colony simulation game inspired by R
 - Scroll through buildable items (TAB) and see a preview before building
 - Modular and extensible codebase for future features
 - Robust save/load system that captures all game state
+- Many researchable items: walls, doors, traps, turrets, campfire, workbench, trap pit, and more
+- Research can be done in any order
+- Doors can be built and opened/closed with the **E** key
 
 ## Controls
 - Arrow keys: Move the colonist (up, down, left, right) and set facing direction
@@ -29,6 +32,7 @@ Deadhold is a prototype for a zombie-themed colony simulation game inspired by R
 - **F9**: Load game
 - **Escape**: Quit the game or close research menu
 - Close window: Quit the game
+- **E**: Open/close a door when standing on it
 
 ## How to Run
 1. Install Python 3.x
@@ -65,19 +69,26 @@ Deadhold is a prototype for a zombie-themed colony simulation game inspired by R
 
 ## Assets Needed
 
-For the new blueprints in the research/build system, add these PNG files to your `assets` folder:
+For the new blueprints and researchable items, add these PNG files to your `assets` folder:
 
-- `wall.png` (for "Wood Wall")
-- `stone_wall.png` (for "Stone Wall")
-- `spike.png` (for the "Spike Trap" blueprint)
-- `turret.png` (for the "Turret" blueprint)
+- `wall.png` (Wood Wall)
+- `stone_wall.png` (Stone Wall)
+- `spike.png` (Spike Trap)
+- `turret.png` (Turret)
+- `door.png` (Door, closed)
+- `door_open.png` (Door, open)
+- `campfire.png` (Campfire)
+- `workbench.png` (Workbench)
+- `trap_pit.png` (Trap Pit)
+
+**All images should be 64x64 pixels.**
 
 Place these files in:
 ```
 x:\Coding\Python\Deadhold-1\assets\
 ```
 
-If you don't have custom images, you can use placeholder PNGs with the correct names and sizes (64x64 pixels).
+If you don't have custom images, you can use placeholder PNGs with the correct names and sizes.
 
 ---
 *This is an early prototype. Contributions and feedback are welcome!*

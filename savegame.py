@@ -47,9 +47,36 @@ class SaveGame:
             "mined": getattr(rock, "mined", False)
         }
 
+    @staticmethod
+    def serialize_spike(spike):
+        return {
+            "x": spike.x,
+            "y": spike.y,
+            "hp": spike.hp
+        }
+
+    @staticmethod
+    def serialize_turret(turret):
+        return {
+            "x": turret.x,
+            "y": turret.y,
+            "hp": turret.hp,
+            "cooldown": getattr(turret, "cooldown", 0)
+        }
+
+    @staticmethod
+    def serialize_door(door):
+        return {
+            "x": door.x,
+            "y": door.y,
+            "hp": door.hp,
+            "open": getattr(door, "open", False)
+        }
+
     @classmethod
     def save(cls, colonist, zombies, walls, trees, wood, rocks=None, stone=0,
-             xp=0, level=1, skill_points=0, xp_to_next=10, unlocked_blueprints=None, selected_blueprint_idx=0):
+             xp=0, level=1, skill_points=0, xp_to_next=10, unlocked_blueprints=None, selected_blueprint_idx=0,
+             spikes=None, turrets=None, doors=None, floors=None):
         try:
             data = {
                 "colonist": cls.serialize_colonist(colonist),
@@ -57,6 +84,10 @@ class SaveGame:
                 "walls": [cls.serialize_wall(w) for w in walls],
                 "trees": [cls.serialize_tree(t) for t in trees],
                 "rocks": [cls.serialize_rock(r) for r in (rocks or [])],
+                "spikes": [cls.serialize_spike(s) for s in (spikes or [])],
+                "turrets": [cls.serialize_turret(t) for t in (turrets or [])],
+                "doors": [cls.serialize_door(d) for d in (doors or [])],
+                "floors": list(floors or []),
                 "wood": wood,
                 "stone": stone,
                 "xp": xp,
@@ -67,7 +98,7 @@ class SaveGame:
                 "selected_blueprint_idx": selected_blueprint_idx
             }
             with open(SAVE_FILE, "w") as f:
-                json.dump(data, f)
+                json.dump(data, f, indent=2)
             return True
         except Exception as e:
             print(f"Error saving game: {e}")

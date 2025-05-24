@@ -334,3 +334,35 @@ class Bullet:
 
     def draw(self, surface, cam_x=0, cam_y=0):
         pygame.draw.circle(surface, (255, 255, 0), (self.x * TILE_SIZE + TILE_SIZE // 2 - cam_x, self.y * TILE_SIZE + TILE_SIZE // 2 - cam_y), 8)
+
+class Door:
+    image_closed = None
+    image_open = None
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.hp = 100
+        self.open = False
+        if Door.image_closed is None:
+            Door.image_closed = load_image("door.png")
+        if Door.image_open is None:
+            Door.image_open = load_image("door_open.png") or Door.image_closed
+
+    def draw(self, surface, cam_x=0, cam_y=0):
+        img = Door.image_open if self.open else Door.image_closed
+        if img:
+            surface.blit(img, (self.x * TILE_SIZE - cam_x, self.y * TILE_SIZE - cam_y))
+        else:
+            color = (200, 180, 80) if self.open else (120, 100, 40)
+            pygame.draw.rect(surface, color, (self.x * TILE_SIZE - cam_x, self.y * TILE_SIZE - cam_y, TILE_SIZE, TILE_SIZE))
+        # HP bar
+        if self.hp < 100:
+            bar_width = int(TILE_SIZE * (self.hp / 100))
+            pygame.draw.rect(surface, (255, 0, 0), (self.x * TILE_SIZE - cam_x, self.y * TILE_SIZE - cam_y + TILE_SIZE - 6, bar_width, 5))
+
+    def damage(self, amount):
+        self.hp -= amount
+
+    def toggle(self):
+        self.open = not self.open
