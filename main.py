@@ -1,9 +1,24 @@
 import pygame
 import random
-from entities import Colonist, Zombie, Wall, Tree
+from entities import Colonist, Zombie, Wall, Tree, Rock
 from hud import draw_hud
-from savegame import save_game, load_game
 import os
+
+#
+import sys
+sys.path.insert(0, os.path.dirname(__file__))
+
+try:
+    from savegame import save_game, load_game
+except ImportError:
+    import importlib.util
+    savegame_path = os.path.join(os.path.dirname(__file__), "savegame.py")
+    spec = importlib.util.spec_from_file_location("savegame", savegame_path)
+    savegame = importlib.util.module_from_spec(spec)
+    sys.modules["savegame"] = savegame
+    spec.loader.exec_module(savegame)
+    save_game = savegame.save_game
+    load_game = savegame.load_game
 
 # Game settings
 TILE_SIZE = 64
@@ -42,18 +57,58 @@ def main():
     zombies = [Zombie(random.randint(0, MAP_WIDTH-1), random.randint(0, MAP_HEIGHT-1)) for _ in range(10)]
     walls = []
     trees = []
+    rocks = []
     wood = 5  # Starting wood
+    stone = 0 # Starting stone
+    ticks = 0
+    FPS = 5
+    MINUTES_PER_STEP = 15  # Each tick of the clock is 15 in-game minutes
+    TICKS_PER_STEP = FPS * 2  # 2 real seconds per in-game step
+    TOTAL_STEPS = 24 * 60 // MINUTES_PER_STEP  # 96 steps in 24 hours
+    # Start at 06:00 (6 AM)
+    current_step = (6 * 60) // MINUTES_PER_STEP  # 6*60=360, 360//15=24
 
-    # Place trees randomly
+    # Place rocks randomly, avoid starting position
     for _ in range(600):
-        tx = random.randint(0, MAP_WIDTH-1)
-        ty = random.randint(0, MAP_HEIGHT-1)
-        # Avoid starting position
-        if abs(tx - colonist.x) > 2 or abs(ty - colonist.y) > 2:
-            trees.append(Tree(tx, ty))
+        placed = False
+        for _ in range(20):  # Try more times to find a free spot
+            rx = random.randint(0, MAP_WIDTH-1)
+            ry = random.randint(0, MAP_HEIGHT-1)
+            if (
+                abs(rx - colonist.x) > 2 or abs(ry - colonist.y) > 2
+            ) and not any(r.x == rx and r.y == ry for r in rocks):
+                rocks.append(Rock(rx, ry))
+                placed = True
+                break
+    print(f"Rocks placed: {len(rocks)}")
+   
+    for _ in range(600):
+        placed = False
+        for _ in range(20):
+            tx = random.randint(0, MAP_WIDTH-1)
+            ty = random.randint(0, MAP_HEIGHT-1)
+            if (
+                abs(tx - colonist.x) > 2 or abs(ty - colonist.y) > 2
+            ) and not any(t.x == tx and t.y == ty for t in trees) \
+              and not any(r.x == tx and r.y == ty for r in rocks):
+                trees.append(Tree(tx, ty))
+                placed = True
+                break
 
     running = True
     while running:
+        ticks += 1
+        # Advance in-game time every TICKS_PER_STEP frames
+        if ticks % TICKS_PER_STEP == 0:
+            current_step = (current_step + 1) % TOTAL_STEPS
+
+        # Calculate hour and minute
+        hour = (current_step * MINUTES_PER_STEP) // 60
+        minute = (current_step * MINUTES_PER_STEP) % 60
+
+        # Day/night logic: day from 6:00 to 21:00 (6am to 9pm), night otherwise
+        is_night = not (6 <= hour < 21)
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -62,7 +117,7 @@ def main():
                 running = False
             # Save game with F5
             if event.type == pygame.KEYDOWN and event.key == pygame.K_F5:
-                save_game(colonist, zombies, walls, trees, wood)
+                save_game(colonist, zombies, walls, trees, wood, rocks, stone)
                 print("Game saved.")
             # Load game with F9
             if event.type == pygame.KEYDOWN and event.key == pygame.K_F9:
@@ -92,8 +147,14 @@ def main():
                         tree = Tree(t["x"], t["y"])
                         tree.cut_down = t.get("cut_down", False)
                         trees.append(tree)
-                    # Restore wood
-                    wood = data.get("wood", 0)
+                    # Restore rocks
+                    rocks = []
+                    for r in data.get("rocks", []):
+                        rock = Rock(r["x"], r["y"])
+                        rock.mined = r.get("mined", False)
+                        rocks.append(rock)
+                    # Restore stone
+                    stone = data.get("stone", 0)
                     print("Game loaded.")
                 else:
                     print("No save file found.")
@@ -119,21 +180,31 @@ def main():
                     for tree in trees:
                         if tree.x == target_x and tree.y == target_y:
                             wood += tree.cut()
+                            attacked = True
+                            break
+                # Attack rock (get stone)
+                if not attacked:
+                    for rock in rocks:
+                        if rock.x == target_x and rock.y == target_y:
+                            stone += rock.mine()
                             break
 
         keys = pygame.key.get_pressed()
+        # Prepare list of impassable objects (tree bases and rocks)
+        impassable = [t for t in trees if not t.cut_down] + [r for r in rocks if not r.mined]
         if keys[pygame.K_UP]:
-            colonist.move(0, -1, walls, trees)
+            colonist.move(0, -1, walls, impassable)
         if keys[pygame.K_DOWN]:
-            colonist.move(0, 1, walls, trees)
+            colonist.move(0, 1, walls, impassable)
         if keys[pygame.K_LEFT]:
-            colonist.move(-1, 0, walls, trees)
+            colonist.move(-1, 0, walls, impassable)
         if keys[pygame.K_RIGHT]:
-            colonist.move(1, 0, walls, trees)
+            colonist.move(1, 0, walls, impassable)
 
         # Update zombies
         for zombie in zombies:
-            zombie.update(colonist, walls)
+            # Zombies should also not walk through tree bases or rocks
+            zombie.update(colonist, walls + impassable)
             if zombie.x == colonist.x and zombie.y == colonist.y:
                 colonist.hp -= 1
 
@@ -141,8 +212,9 @@ def main():
         zombies = [z for z in zombies if z.hp > 0]
         # Remove destroyed walls
         walls = [w for w in walls if w.hp > 0]
-        # Remove cut trees
+        # Remove cut trees and mined rocks
         trees = [t for t in trees if not t.cut_down]
+        rocks = [r for r in rocks if not r.mined]
 
         # Camera scroll: center on colonist
         cam_x = colonist.x * TILE_SIZE - SCREEN_WIDTH // 2 + TILE_SIZE // 2
@@ -152,7 +224,7 @@ def main():
 
         # Draw
         screen.fill((50, 50, 50))
-        # Draw grass tiles (only visible area)
+        # Draw grass tiles (always the very bottom layer)
         for x in range(SCREEN_WIDTH // TILE_SIZE):
             for y in range(SCREEN_HEIGHT // TILE_SIZE):
                 wx = x + cam_x // TILE_SIZE
@@ -162,27 +234,48 @@ def main():
                         screen.blit(grass_img, (x*TILE_SIZE, y*TILE_SIZE))
                     else:
                         pygame.draw.rect(screen, (34, 139, 34), (x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE))
-        # Draw grid (optional, comment out to hide)
-        # for x in range(SCREEN_WIDTH // TILE_SIZE):
-        #     for y in range(SCREEN_HEIGHT // TILE_SIZE):
-        #         wx = x + cam_x // TILE_SIZE
-        #         wy = y + cam_y // TILE_SIZE
-        #         if 0 <= wx < MAP_WIDTH and 0 <= wy < MAP_HEIGHT:
-        #             pygame.draw.rect(screen, WHITE, (x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE), 1)
-        # Draw trees
-        for tree in trees:
-            tree.draw(screen, cam_x, cam_y)
-        # Draw walls
+        # Draw rocks before trees
+        for rock in rocks:
+            rock.draw(screen, cam_x, cam_y)
+        # Draw walls before trees and characters
         for wall in walls:
             wall.draw(screen, cam_x, cam_y)
+        # Draw trees that are NOT covering any character (base and canopy not above colonist or any zombie)
+        for tree in trees:
+            covered = (tree.x == colonist.x and tree.y - 1 == colonist.y) or any(tree.x == z.x and tree.y - 1 == z.y for z in zombies)
+            if not covered:
+                tree.draw(screen, cam_x, cam_y)
+        # Draw colonist
         colonist.draw(screen, cam_x, cam_y)
+        # Draw zombies
         for zombie in zombies:
             zombie.draw(screen, cam_x, cam_y)
+        # Draw trees that ARE covering any character (canopy above colonist or any zombie)
+        for tree in trees:
+            covered = (tree.x == colonist.x and tree.y - 1 == colonist.y) or any(tree.x == z.x and tree.y - 1 == z.y for z in zombies)
+            if covered:
+                tree.draw(screen, cam_x, cam_y)
 
-        draw_hud(screen, colonist, wood)
+        draw_hud(screen, colonist, wood, stone)
+
+        # Night overlay
+        if is_night:
+            night_overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            night_overlay.fill((0, 0, 40, 120))  # RGBA: blue-black, alpha for darkness
+            screen.blit(night_overlay, (0, 0))
+
+        # Draw day/night indicator
+        font = pygame.font.SysFont(None, 32)
+        dn_text = font.render("Night" if is_night else "Day", True, (200, 200, 255) if is_night else (255, 255, 0))
+        screen.blit(dn_text, (SCREEN_WIDTH - 110, 5))
+
+        # Draw conventional clock at the top center
+        clock_str = f"{hour:02d}:{minute:02d}"
+        clock_text = font.render(clock_str, True, (255, 255, 255))
+        screen.blit(clock_text, (SCREEN_WIDTH // 2 - clock_text.get_width() // 2, 5))
 
         pygame.display.flip()
-        clock.tick(5)
+        clock.tick(FPS)
 
         if colonist.hp <= 0:
             print("Colonist died!")

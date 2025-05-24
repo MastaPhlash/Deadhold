@@ -22,6 +22,7 @@ RED = (200, 0, 0)
 GRAY = (50, 50, 50)
 WALL_COLOR = (120, 120, 120)
 TREE_COLOR = (34, 139, 34)
+ROCK_COLOR = (100, 100, 100)
 
 def load_image(filename):
     path = os.path.join(ASSET_DIR, filename)
@@ -206,14 +207,65 @@ class Tree:
         self.color = TREE_COLOR
         self.cut_down = False
         if Tree.image is None:
-            Tree.image = load_image("tree.png")
+            # Load a 1x2 tile image, or scale a 1x1 image to 1x2 tiles
+            img = load_image("tree.png")
+            if img and img.get_height() != TILE_SIZE * 2:
+                img = pygame.transform.smoothscale(img, (TILE_SIZE, TILE_SIZE * 2))
+            Tree.image = img
 
     def draw(self, surface, cam_x=0, cam_y=0):
         if Tree.image:
-            surface.blit(Tree.image, (self.x * TILE_SIZE - cam_x, self.y * TILE_SIZE - cam_y))
+            # Draw the tree image so its base is at (self.x, self.y)
+            surface.blit(Tree.image, (self.x * TILE_SIZE - cam_x, (self.y - 1) * TILE_SIZE - cam_y))
         else:
-            pygame.draw.rect(surface, self.color, (self.x * TILE_SIZE - cam_x + 4, self.y * TILE_SIZE - cam_y + 4, TILE_SIZE - 8, TILE_SIZE - 8))
+            # Draw a tall rectangle as a placeholder
+            pygame.draw.rect(
+                surface,
+                self.color,
+                (self.x * TILE_SIZE - cam_x + 4, (self.y - 1) * TILE_SIZE - cam_y + 4, TILE_SIZE - 8, TILE_SIZE * 2 - 8)
+            )
 
     def cut(self):
         self.cut_down = True
         return 2  # Amount of wood per tree
+
+    def damage(self, amount):
+        # Trees are not damaged by zombies, so do nothing
+        pass
+
+class Rock:
+    image = None
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.color = ROCK_COLOR
+        self.mined = False
+
+    def draw(self, surface, cam_x=0, cam_y=0):
+        # Always try to load the image if not loaded yet
+        if Rock.image is None and pygame.get_init():
+            Rock.image = load_image("rock.png")
+        if Rock.image:
+            surface.blit(Rock.image, (self.x * TILE_SIZE - cam_x, self.y * TILE_SIZE - cam_y))
+        else:
+            # Draw a more visible placeholder for stone
+            pygame.draw.rect(
+                surface,
+                (180, 180, 180),
+                (self.x * TILE_SIZE - cam_x + 8, self.y * TILE_SIZE - cam_y + 8, TILE_SIZE - 16, TILE_SIZE - 16)
+            )
+            pygame.draw.rect(
+                surface,
+                (80, 80, 80),
+                (self.x * TILE_SIZE - cam_x + 20, self.y * TILE_SIZE - cam_y + 20, TILE_SIZE - 40, TILE_SIZE - 40)
+            )
+            print("Warning: rock.png not found or could not be loaded.")
+
+    def mine(self):
+        self.mined = True
+        return 2  # Amount of stone per rock
+
+    def damage(self, amount):
+        # Rocks are not damaged by zombies, so do nothing
+        pass
