@@ -16,6 +16,8 @@ Deadhold is a prototype for a zombie-themed colony simulation game inspired by R
 - Arrow keys: Move the colonist (up, down, left, right) and set facing direction
 - Spacebar: Build a wall at colonist's position (costs 1 wood)
 - **A key**: Attack in the direction you are facing (damages zombies or cuts trees for wood)
+- **F5**: Save game
+- **F9**: Load game
 - **Escape**: Quit the game
 - Close window: Quit the game
 
@@ -46,6 +48,7 @@ Deadhold is a prototype for a zombie-themed colony simulation game inspired by R
 - Your colonist attacks only in the direction they are facing (indicated by a yellow square).
 - You must have wood to build walls. Attack trees to gather wood.
 - The camera scrolls to keep your colonist centered as you explore the huge map.
+- Press **F5** to save and **F9** to load your game at any time.
 
 ---
 *This is an early prototype. Contributions and feedback are welcome!*

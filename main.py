@@ -2,6 +2,7 @@ import pygame
 import random
 from entities import Colonist, Zombie, Wall, Tree
 from hud import draw_hud
+from savegame import save_game, load_game
 import os
 
 # Game settings
@@ -59,6 +60,43 @@ def main():
             # Exit with Escape key
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 running = False
+            # Save game with F5
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_F5:
+                save_game(colonist, zombies, walls, trees, wood)
+                print("Game saved.")
+            # Load game with F9
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_F9:
+                data = load_game()
+                if data:
+                    # Restore colonist
+                    colonist.x = data["colonist"]["x"]
+                    colonist.y = data["colonist"]["y"]
+                    colonist.hp = data["colonist"]["hp"]
+                    colonist.facing = tuple(data["colonist"].get("facing", (0, -1)))
+                    # Restore zombies
+                    zombies = []
+                    for z in data["zombies"]:
+                        zombie = Zombie(z["x"], z["y"])
+                        zombie.hp = z["hp"]
+                        zombie.facing = tuple(z.get("facing", (0, 1)))
+                        zombies.append(zombie)
+                    # Restore walls
+                    walls = []
+                    for w in data["walls"]:
+                        wall = Wall(w["x"], w["y"])
+                        wall.hp = w["hp"]
+                        walls.append(wall)
+                    # Restore trees
+                    trees = []
+                    for t in data["trees"]:
+                        tree = Tree(t["x"], t["y"])
+                        tree.cut_down = t.get("cut_down", False)
+                        trees.append(tree)
+                    # Restore wood
+                    wood = data.get("wood", 0)
+                    print("Game loaded.")
+                else:
+                    print("No save file found.")
             # Place wall with spacebar (costs wood)
             if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                 if wood > 0 and not any(w.x == colonist.x and w.y == colonist.y for w in walls) and not any(t.x == colonist.x and t.y == colonist.y for t in trees):
