@@ -1,6 +1,6 @@
 import pygame
 import random
-from entities import Colonist, Zombie, Wall, Tree, Rock, Spike, Turret, Bullet, Door
+from entities import Colonist, Zombie, Wall, Tree, Rock, Spike, Turret, Bullet, Door, TrapPit, Workbench, Campfire
 from hud import draw_hud
 from game_systems import (MapGenerator, TimeSystem, WaveSystem, ExperienceSystem, 
                          CombatSystem, MinimapSystem, ConstructionPlanningSystem, 
@@ -124,6 +124,22 @@ def set_game_state(data, all_blueprints):
         door.hp = d.get("hp", 1)
         door.open = d.get("open", False)
         doors.append(door)
+    trap_pits = []
+    for tp in data.get("trap_pits", []):
+        trap_pit = TrapPit(tp["x"], tp["y"])
+        trap_pit.hp = tp.get("hp", 1)
+        trap_pits.append(trap_pit)
+    workbenches = []
+    for wb in data.get("workbenches", []):
+        workbench = Workbench(wb["x"], wb["y"])
+        workbench.hp = wb.get("hp", 1)
+        workbenches.append(workbench)
+    campfires = []
+    for cf in data.get("campfires", []):
+        campfire = Campfire(cf["x"], cf["y"])
+        campfire.hp = cf.get("hp", 1)
+        campfire.lit = cf.get("lit", False)
+        campfires.append(campfire)
     wood = data.get("wood", 5)  # Default to 5 if not present
     stone = data.get("stone", 0)
     xp = data.get("xp", 0)
@@ -157,6 +173,9 @@ def main():
     spikes = []
     turrets = []
     bullets = []
+    trap_pits = []
+    workbenches = []
+    campfires = []
     wood = 5
     stone = 0
     
@@ -314,7 +333,10 @@ def main():
                                       or any(t.x == colonist.x and t.y == colonist.y for t in trees) \
                                       or any(s.x == colonist.x and s.y == colonist.y for s in spikes) \
                                       or any(tu.x == colonist.x and tu.y == colonist.y for tu in turrets) \
-                                      or any(d.x == colonist.x and d.y == colonist.y for d in doors)
+                                      or any(d.x == colonist.x and d.y == colonist.y for d in doors) \
+                                      or any(tp.x == colonist.x and tp.y == colonist.y for tp in trap_pits) \
+                                      or any(wb.x == colonist.x and wb.y == colonist.y for wb in workbenches) \
+                                      or any(cf.x == colonist.x and cf.y == colonist.y for cf in campfires)
                             if can_build and not blocked:
                                 if bp["name"] == "wood_wall":
                                     walls.append(Wall(colonist.x, colonist.y, wall_type="wood"))
@@ -326,6 +348,12 @@ def main():
                                     turrets.append(Turret(colonist.x, colonist.y))
                                 elif bp["name"] == "door":
                                     doors.append(Door(colonist.x, colonist.y))
+                                elif bp["name"] == "trap_pit":
+                                    trap_pits.append(TrapPit(colonist.x, colonist.y))
+                                elif bp["name"] == "workbench":
+                                    workbenches.append(Workbench(colonist.x, colonist.y))
+                                elif bp["name"] == "campfire":
+                                    campfires.append(Campfire(colonist.x, colonist.y))
                                 # Add more buildables as needed
                                 if "wood" in bp["cost"]:
                                     wood -= bp["cost"]["wood"]
@@ -335,10 +363,27 @@ def main():
                                     xp += 1
                                     last_build_positions.add(build_pos)
                     elif event.key == pygame.K_e:
+                        # Interact with doors, workbenches, or campfires
+                        interacted = False
                         for door in doors:
                             if door.x == colonist.x and door.y == colonist.y:
                                 door.toggle()
+                                interacted = True
                                 break
+                        if not interacted:
+                            for workbench in workbenches:
+                                if workbench.x == colonist.x and workbench.y == colonist.y:
+                                    if workbench.start_crafting():
+                                        print("Started crafting at workbench...")
+                                    interacted = True
+                                    break
+                        if not interacted:
+                            for campfire in campfires:
+                                if campfire.x == colonist.x and campfire.y == colonist.y:
+                                    campfire.toggle_light()
+                                    print(f"Campfire {'lit' if campfire.lit else 'extinguished'}")
+                                    break
+
                     elif event.key == pygame.K_a:
                         fx, fy = colonist.facing
                         target_x = colonist.x + fx
@@ -444,68 +489,78 @@ def main():
         end_tile_x = min(MAP_WIDTH, start_tile_x + SCREEN_TILES_X)
         end_tile_y = min(MAP_HEIGHT, start_tile_y + SCREEN_TILES_Y)
 
-        # Draw background tiles efficiently
-        screen.fill((50, 50, 50))
+        # Draw background tiles efficiently - MOVE GRASS TO BOTTOM LAYER
+        screen.fill((34, 139, 34))  # Green background as base grass color
         for wx in range(start_tile_x, end_tile_x):
             for wy in range(start_tile_y, end_tile_y):
                 screen_x = wx * TILE_SIZE - cam_x
                 screen_y = wy * TILE_SIZE - cam_y
                 
-                # Draw floor tile if present, else grass
+                # First draw grass everywhere as base layer
+                if grass_img:
+                    screen.blit(grass_img, (screen_x, screen_y))
+                
+                # Then draw floor tiles on top where present
                 if (wx, wy) in floors and floor_img:
                     screen.blit(floor_img, (screen_x, screen_y))
-                elif grass_img:
-                    screen.blit(grass_img, (screen_x, screen_y))
-                else:
-                    pygame.draw.rect(screen, (34, 139, 34), (screen_x, screen_y, TILE_SIZE, TILE_SIZE))
 
         # Optimized entity drawing - pre-filter entities by viewport
         def is_on_screen(entity):
             return (start_tile_x - 1 <= entity.x <= end_tile_x and 
                     start_tile_y - 1 <= entity.y <= end_tile_y)
 
-        # Draw entities in proper order, only if visible
-        # Only draw rocks and trees that haven't been harvested
+        # Pre-filter all visible entities first
         visible_rocks = [r for r in rocks if is_on_screen(r) and not r.mined]
-        visible_walls = [w for w in walls if is_on_screen(w)]
         visible_spikes = [s for s in spikes if is_on_screen(s)]
+        visible_trap_pits = [tp for tp in trap_pits if is_on_screen(tp)]
+        visible_workbenches = [wb for wb in workbenches if is_on_screen(wb)]
+        visible_campfires = [cf for cf in campfires if is_on_screen(cf)]
+        visible_walls = [w for w in walls if is_on_screen(w)]
         visible_turrets = [t for t in turrets if is_on_screen(t)]
         visible_doors = [d for d in doors if is_on_screen(d)]
         visible_zombies = [z for z in zombies if is_on_screen(z)]
         visible_bullets = [b for b in bullets if is_on_screen(b)]
-        
-        # Trees need special handling for 2-tile height - only draw uncut trees
         visible_trees = [t for t in trees if start_tile_x - 1 <= t.x <= end_tile_x and 
                         start_tile_y - 2 <= t.y <= end_tile_y and not t.cut_down]
 
+        # LAYER 1: Ground-level items (rocks, spikes, trap pits)
         for rock in visible_rocks:
             rock.draw(screen, cam_x, cam_y)
-        for wall in visible_walls:
-            wall.draw(screen, cam_x, cam_y)
         for spike in visible_spikes:
             spike.draw(screen, cam_x, cam_y)
+        for trap_pit in visible_trap_pits:
+            trap_pit.draw(screen, cam_x, cam_y)
+
+        # LAYER 2: Structures and workstations
+        for wall in visible_walls:
+            wall.draw(screen, cam_x, cam_y)
         for turret in visible_turrets:
             turret.draw(screen, cam_x, cam_y)
-        for bullet in visible_bullets:
-            bullet.draw(screen, cam_x, cam_y)
-        
-        # Draw trees behind entities first
+        for door in visible_doors:
+            door.draw(screen, cam_x, cam_y)
+        for workbench in visible_workbenches:
+            workbench.draw(screen, cam_x, cam_y)
+        for campfire in visible_campfires:
+            campfire.draw(screen, cam_x, cam_y)
+
+        # LAYER 3: Trees behind entities
         for tree in visible_trees:
             covered = (tree.x == colonist.x and tree.y - 1 == colonist.y) or \
                      any(tree.x == z.x and tree.y - 1 == z.y for z in visible_zombies)
             if not covered:
                 tree.draw(screen, cam_x, cam_y)
-        
-        for door in visible_doors:
-            door.draw(screen, cam_x, cam_y)
-        
+
+        # LAYER 4: Moving entities
         # Always draw colonist (assuming they're always on screen)
         colonist.draw(screen, cam_x, cam_y)
         
         for zombie in visible_zombies:
             zombie.draw(screen, cam_x, cam_y)
         
-        # Draw trees in front of entities
+        for bullet in visible_bullets:
+            bullet.draw(screen, cam_x, cam_y)
+        
+        # LAYER 5: Trees in front of entities
         for tree in visible_trees:
             covered = (tree.x == colonist.x and tree.y - 1 == colonist.y) or \
                      any(tree.x == z.x and tree.y - 1 == z.y for z in visible_zombies)
@@ -569,10 +624,26 @@ def main():
         CombatSystem.update_turrets(turrets, zombies, bullets, Bullet)
         CombatSystem.update_bullets(bullets, zombies, MAP_WIDTH, MAP_HEIGHT)
         CombatSystem.update_spikes(spikes, zombies)
+        CombatSystem.update_trap_pits(trap_pits, zombies)
+
+        # Update workbenches and campfires
+        for workbench in workbenches:
+            if workbench.update():  # Crafting finished
+                # Give bonus resources when crafting completes
+                wood += 1
+                stone += 1
+                xp += 2
+                print("Crafting complete! +1 wood, +1 stone, +2 XP")
+        
+        for campfire in campfires:
+            campfire.update()
+            if campfire.heal_nearby(colonist):
+                print("Healed by campfire!")
 
         # Update zombies
         for zombie in zombies:
-            zombie.update(colonist, walls + impassable + spikes + turrets + [d for d in doors if not d.open])
+            # Pass walls, doors, turrets, and impassable terrain, but NOT spikes or trap_pits
+            zombie.update(colonist, walls + impassable + turrets + [d for d in doors if not d.open])
             if zombie.x == colonist.x and zombie.y == colonist.y:
                 colonist.hp -= 1
                 stats.increment("damage_taken", 1)
@@ -591,6 +662,14 @@ def main():
         spikes = [s for s in spikes if s.hp > 0]
         turrets = [t for t in turrets if t.hp > 0]
         doors = [d for d in doors if d.hp > 0]
+        trap_pits = [tp for tp in trap_pits if tp.hp > 0]
+        workbenches = [wb for wb in workbenches if wb.hp > 0]
+        campfires = [cf for cf in campfires if cf.hp > 0]
+
+        # Process level-ups from accumulated XP
+        xp, level, skill_points, xp_to_next, leveled = ExperienceSystem.check_level_up(xp, level, skill_points, xp_to_next)
+        if leveled:
+            print(f"Level up! Now level {level}. You have {skill_points} skill points.")
 
         # Count trees and rocks cut/mined for stats before removing them
         cut_trees = [t for t in trees if t.cut_down]

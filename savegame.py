@@ -73,10 +73,38 @@ class SaveGame:
             "open": getattr(door, "open", False)
         }
 
+    @staticmethod
+    def serialize_trap_pit(trap_pit):
+        return {
+            "x": trap_pit.x,
+            "y": trap_pit.y,
+            "hp": trap_pit.hp
+        }
+
+    @staticmethod
+    def serialize_workbench(workbench):
+        return {
+            "x": workbench.x,
+            "y": workbench.y,
+            "hp": workbench.hp,
+            "in_use": workbench.in_use,
+            "craft_timer": workbench.craft_timer
+        }
+
+    @staticmethod
+    def serialize_campfire(campfire):
+        return {
+            "x": campfire.x,
+            "y": campfire.y,
+            "hp": campfire.hp,
+            "lit": campfire.lit,
+            "fuel": campfire.fuel
+        }
+
     @classmethod
     def save(cls, colonist, zombies, walls, trees, wood, rocks=None, stone=0,
              xp=0, level=1, skill_points=0, xp_to_next=10, unlocked_blueprints=None, selected_blueprint_idx=0,
-             spikes=None, turrets=None, doors=None, floors=None):
+             spikes=None, turrets=None, doors=None, floors=None, trap_pits=None, workbenches=None, campfires=None):
         try:
             data = {
                 "colonist": cls.serialize_colonist(colonist),
@@ -87,6 +115,9 @@ class SaveGame:
                 "spikes": [cls.serialize_spike(s) for s in (spikes or [])],
                 "turrets": [cls.serialize_turret(t) for t in (turrets or [])],
                 "doors": [cls.serialize_door(d) for d in (doors or [])],
+                "trap_pits": [cls.serialize_trap_pit(tp) for tp in (trap_pits or [])],
+                "workbenches": [cls.serialize_workbench(wb) for wb in (workbenches or [])],
+                "campfires": [cls.serialize_campfire(cf) for cf in (campfires or [])],
                 "floors": list(floors or []),
                 "wood": wood,
                 "stone": stone,
@@ -124,10 +155,10 @@ class SaveGame:
 # For backward compatibility with existing code
 def save_game(colonist, zombies, walls, trees, wood, rocks=None, stone=0,
               xp=0, level=1, skill_points=0, xp_to_next=10, unlocked_blueprints=None, selected_blueprint_idx=0,
-              spikes=None, turrets=None, doors=None, floors=None):
+              spikes=None, turrets=None, doors=None, floors=None, trap_pits=None, workbenches=None, campfires=None):
     return SaveGame.save(colonist, zombies, walls, trees, wood, rocks, stone,
                          xp, level, skill_points, xp_to_next, unlocked_blueprints, selected_blueprint_idx,
-                         spikes, turrets, doors, floors)
+                         spikes, turrets, doors, floors, trap_pits, workbenches, campfires)
 
 def load_game():
     return SaveGame.load()

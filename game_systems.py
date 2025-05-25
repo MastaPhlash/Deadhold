@@ -27,8 +27,12 @@ class MapGenerator:
             for x in range(bx, bx + bw):
                 for y in range(by, by + bh):
                     if x == bx or x == bx + bw - 1 or y == by or y == by + bh - 1:
-                        # Random door placement
-                        if (random.random() < 0.08 and 
+                        # Check if this is a corner position
+                        is_corner = ((x == bx or x == bx + bw - 1) and 
+                                   (y == by or y == by + bh - 1))
+                        
+                        # Random door placement (only if not a corner)
+                        if (not is_corner and random.random() < 0.08 and 
                             ((y == by or y == by + bh - 1) or (x == bx or x == bx + bw - 1))):
                             if not any(d.x == x and d.y == y for d in doors):
                                 doors.append(Door(x, y))
@@ -197,7 +201,7 @@ class CombatSystem:
 
     @staticmethod
     def update_spikes(spikes, zombies):
-        """Optimized spike damage with spatial optimization"""
+        """Spikes damage zombies and slowly degrade when stepped on"""
         alive_zombies = [z for z in zombies if z.hp > 0]
         
         # Create a position lookup for faster collision detection
@@ -208,7 +212,38 @@ class CombatSystem:
                 continue
             zombie = zombie_positions.get((spike.x, spike.y))
             if zombie:
+                # Deal damage to zombie standing on spike
                 zombie.hp -= 10
+                
+                # Slowly degrade the spike from use (1 damage per frame a zombie is on it)
+                spike.hp -= 1
+                
+                # Visual feedback when spike deals damage
+                spike.last_damage_time = pygame.time.get_ticks()
+
+    @staticmethod
+    def update_trap_pits(trap_pits, zombies):
+        """Trap pits deal heavy damage and slow zombies, plus degrade slowly"""
+        alive_zombies = [z for z in zombies if z.hp > 0]
+        
+        # Create a position lookup for faster collision detection
+        zombie_positions = {(z.x, z.y): z for z in alive_zombies}
+        
+        for trap_pit in trap_pits:
+            if trap_pit.hp <= 0:
+                continue
+            zombie = zombie_positions.get((trap_pit.x, trap_pit.y))
+            if zombie:
+                # Deal heavy damage every frame (20 damage per frame at 5 FPS = 100 DPS)
+                zombie.hp -= 20
+                # Slow down zombie movement by resetting move counter
+                zombie.move_counter = 0
+                
+                # Trap pits degrade slower than spikes (0.5 damage per frame)
+                trap_pit.hp -= 0.5
+                
+                # Visual feedback when trap pit deals damage
+                trap_pit.last_damage_time = pygame.time.get_ticks()
 
 class MinimapSystem:
     def __init__(self, minimap_size=150):
