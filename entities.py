@@ -519,6 +519,7 @@ class Workbench:
 
 class Campfire:
     image = None
+    image_off = None
 
     def __init__(self, x, y):
         self.x = x
@@ -529,10 +530,19 @@ class Campfire:
         self.last_heal_time = 0
         if Campfire.image is None:
             Campfire.image = load_image("campfire.png")
+        if Campfire.image_off is None:
+            Campfire.image_off = load_image("campfire_off.png")
 
     def draw(self, surface, cam_x=0, cam_y=0):
-        if Campfire.image:
-            surface.blit(Campfire.image, (self.x * TILE_SIZE - cam_x, self.y * TILE_SIZE - cam_y))
+        # Choose appropriate image based on lit state and fuel
+        img_to_use = None
+        if self.lit and self.fuel > 0:
+            img_to_use = Campfire.image
+        else:
+            img_to_use = Campfire.image_off or Campfire.image
+            
+        if img_to_use:
+            surface.blit(img_to_use, (self.x * TILE_SIZE - cam_x, self.y * TILE_SIZE - cam_y))
         else:
             # Stone base
             pygame.draw.circle(surface, (100, 100, 100), (self.x * TILE_SIZE - cam_x + TILE_SIZE // 2, self.y * TILE_SIZE - cam_y + TILE_SIZE // 2), 20)

@@ -1,10 +1,10 @@
 {
   "colonist": {
-    "x": 82,
-    "y": 52,
-    "hp": 89,
+    "x": 93,
+    "y": 54,
+    "hp": 99,
     "facing": [
-      1,
+      -1,
       0
     ]
   },
@@ -19,21 +19,12 @@
       ]
     },
     {
-      "x": 76,
-      "y": 67,
+      "x": 83,
+      "y": 44,
       "hp": 100,
       "facing": [
-        0,
-        -1
-      ]
-    },
-    {
-      "x": 66,
-      "y": 20,
-      "hp": 100,
-      "facing": [
-        0,
-        1
+        1,
+        0
       ]
     },
     {
@@ -46,17 +37,8 @@
       ]
     },
     {
-      "x": 67,
-      "y": 35,
-      "hp": 100,
-      "facing": [
-        0,
-        1
-      ]
-    },
-    {
-      "x": 57,
-      "y": 95,
+      "x": 73,
+      "y": 73,
       "hp": 100,
       "facing": [
         0,
@@ -64,12 +46,12 @@
       ]
     },
     {
-      "x": 152,
-      "y": 5,
+      "x": 129,
+      "y": 19,
       "hp": 100,
       "facing": [
-        -1,
-        0
+        0,
+        1
       ]
     },
     {
@@ -88,42 +70,6 @@
       "facing": [
         0,
         1
-      ]
-    },
-    {
-      "x": 110,
-      "y": 79,
-      "hp": 100,
-      "facing": [
-        0,
-        -1
-      ]
-    },
-    {
-      "x": 89,
-      "y": 58,
-      "hp": 100,
-      "facing": [
-        0,
-        -1
-      ]
-    },
-    {
-      "x": 123,
-      "y": 92,
-      "hp": 100,
-      "facing": [
-        -1,
-        0
-      ]
-    },
-    {
-      "x": 96,
-      "y": 38,
-      "hp": 100,
-      "facing": [
-        -1,
-        0
       ]
     }
   ],
@@ -862,14 +808,8 @@
     },
     {
       "x": 118,
-      "y": 91,
-      "hp": 300,
-      "type": "stone"
-    },
-    {
-      "x": 118,
       "y": 92,
-      "hp": 300,
+      "hp": 175,
       "type": "stone"
     },
     {
@@ -900,12 +840,6 @@
       "x": 121,
       "y": 93,
       "hp": 300,
-      "type": "stone"
-    },
-    {
-      "x": 122,
-      "y": 92,
-      "hp": 250,
       "type": "stone"
     },
     {
@@ -1394,7 +1328,7 @@
     {
       "x": 93,
       "y": 47,
-      "cut_down": false
+      "cut_down": true
     },
     {
       "x": 196,
@@ -1879,7 +1813,7 @@
     {
       "x": 86,
       "y": 45,
-      "cut_down": false
+      "cut_down": true
     },
     {
       "x": 195,
@@ -1914,7 +1848,7 @@
     {
       "x": 97,
       "y": 50,
-      "cut_down": false
+      "cut_down": true
     },
     {
       "x": 155,
@@ -2269,7 +2203,7 @@
     {
       "x": 100,
       "y": 49,
-      "cut_down": false
+      "cut_down": true
     },
     {
       "x": 164,
@@ -2289,7 +2223,7 @@
     {
       "x": 91,
       "y": 69,
-      "cut_down": false
+      "cut_down": true
     },
     {
       "x": 198,
@@ -3168,18 +3102,21 @@
   "turrets": [],
   "doors": [],
   "trap_pits": [],
+  "workbenches": [],
+  "campfires": [],
   "floors": [],
-  "wood": 53,
-  "stone": 18,
-  "xp": 28,
-  "level": 5,
+  "wood": 60,
+  "stone": 15,
+  "xp": 17,
+  "level": 6,
   "skill_points": 1,
-  "xp_to_next": 49,
+  "xp_to_next": 73,
   "unlocked_blueprints": [
-    "wood_wall",
     "workbench",
+    "wood_wall",
     "spike",
+    "campfire",
     "trap_pit"
   ],
-  "selected_blueprint_idx": 6
+  "selected_blueprint_idx": 2
 }
