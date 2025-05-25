@@ -27,7 +27,7 @@ MAP_WIDTH = 200
 MAP_HEIGHT = 150
 SCREEN_WIDTH = TILE_SIZE * 15
 SCREEN_HEIGHT = TILE_SIZE * 10
-FPS = 5
+FPS = 60
 
 pygame.init()
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -158,7 +158,7 @@ def main():
     # Initialize game systems
     time_system = TimeSystem()
     wave_system = WaveSystem(FPS)
-    minimap = MinimapSystem()
+    minimap = MinimapSystem()  # Use default zoom (hardcoded in MinimapSystem)
     construction_planner = ConstructionPlanningSystem()
     job_system = JobSystem()
     stats = GameStatistics()
@@ -211,6 +211,9 @@ def main():
     # Pre-calculate screen tile dimensions
     SCREEN_TILES_X = SCREEN_WIDTH // TILE_SIZE + 2  # +2 for partial tiles
     SCREEN_TILES_Y = SCREEN_HEIGHT // TILE_SIZE + 2
+
+    # --- Precompute visible tile set for quick lookup (performance) ---
+    visible_tile_set = set()
 
     while running:
         if not pause_game:
@@ -468,9 +471,7 @@ def main():
 
         # Skip game updates if paused
         if pause_game:
-            # Only draw pause indicator, skip everything else
-            font = pygame.font.SysFont(None, 48)
-            pause_text = font.render("PAUSED (P to resume)", True, (255, 255, 0))
+            pause_text = FONT_28.render("PAUSED (P to resume)", True, (255, 255, 0))
             screen.blit(pause_text, (SCREEN_WIDTH // 2 - pause_text.get_width() // 2, SCREEN_HEIGHT // 2))
             pygame.display.flip()
             clock.tick(FPS)
@@ -488,6 +489,10 @@ def main():
         start_tile_y = max(0, cam_y // TILE_SIZE)
         end_tile_x = min(MAP_WIDTH, start_tile_x + SCREEN_TILES_X)
         end_tile_y = min(MAP_HEIGHT, start_tile_y + SCREEN_TILES_Y)
+        visible_tile_set.clear()
+        for wx in range(start_tile_x, end_tile_x):
+            for wy in range(start_tile_y, end_tile_y):
+                visible_tile_set.add((wx, wy))
 
         # Draw background tiles efficiently - MOVE GRASS TO BOTTOM LAYER
         screen.fill((34, 139, 34))  # Green background as base grass color
@@ -504,24 +509,18 @@ def main():
                 if (wx, wy) in floors and floor_img:
                     screen.blit(floor_img, (screen_x, screen_y))
 
-        # Optimized entity drawing - pre-filter entities by viewport
-        def is_on_screen(entity):
-            return (start_tile_x - 1 <= entity.x <= end_tile_x and 
-                    start_tile_y - 1 <= entity.y <= end_tile_y)
-
-        # Pre-filter all visible entities first
-        visible_rocks = [r for r in rocks if is_on_screen(r) and not r.mined]
-        visible_spikes = [s for s in spikes if is_on_screen(s)]
-        visible_trap_pits = [tp for tp in trap_pits if is_on_screen(tp)]
-        visible_workbenches = [wb for wb in workbenches if is_on_screen(wb)]
-        visible_campfires = [cf for cf in campfires if is_on_screen(cf)]
-        visible_walls = [w for w in walls if is_on_screen(w)]
-        visible_turrets = [t for t in turrets if is_on_screen(t)]
-        visible_doors = [d for d in doors if is_on_screen(d)]
-        visible_zombies = [z for z in zombies if is_on_screen(z)]
-        visible_bullets = [b for b in bullets if is_on_screen(b)]
-        visible_trees = [t for t in trees if start_tile_x - 1 <= t.x <= end_tile_x and 
-                        start_tile_y - 2 <= t.y <= end_tile_y and not t.cut_down]
+        # Pre-filter all visible entities first (performance: use visible_tile_set)
+        visible_rocks = [r for r in rocks if (r.x, r.y) in visible_tile_set and not r.mined]
+        visible_spikes = [s for s in spikes if (s.x, s.y) in visible_tile_set]
+        visible_trap_pits = [tp for tp in trap_pits if (tp.x, tp.y) in visible_tile_set]
+        visible_workbenches = [wb for wb in workbenches if (wb.x, wb.y) in visible_tile_set]
+        visible_campfires = [cf for cf in campfires if (cf.x, cf.y) in visible_tile_set]
+        visible_walls = [w for w in walls if (w.x, w.y) in visible_tile_set]
+        visible_turrets = [t for t in turrets if (t.x, t.y) in visible_tile_set]
+        visible_doors = [d for d in doors if (d.x, d.y) in visible_tile_set]
+        visible_zombies = [z for z in zombies if (z.x, z.y) in visible_tile_set]
+        visible_bullets = [b for b in bullets if (b.x, b.y) in visible_tile_set]
+        visible_trees = [t for t in trees if (t.x, t.y) in visible_tile_set and not t.cut_down]
 
         # LAYER 1: Ground-level items (rocks, spikes, trap pits)
         for rock in visible_rocks:
@@ -587,10 +586,12 @@ def main():
         # Enhanced HUD with QoL info
         draw_hud(screen, colonist, wood, stone, build_img)
         
-        font = pygame.font.SysFont(None, 28)
-        xp_text = font.render(f"XP: {xp}/{xp_to_next}  Level: {level}  SP: {skill_points}", True, (0, 255, 255))
+        # --- Only create overlays once (performance) ---
+        # Move static overlay creation outside the loop if possible
+        # --- Use pre-created fonts ---
+        xp_text = FONT_28.render(f"XP: {xp}/{xp_to_next}  Level: {level}  SP: {skill_points}", True, (0, 255, 255))
         screen.blit(xp_text, (10, 35))
-        day_text = font.render(f"Day: {wave_system.day_count}", True, (255, 255, 255))
+        day_text = FONT_28.render(f"Day: {wave_system.day_count}", True, (255, 255, 255))
         screen.blit(day_text, (10, 65))
 
         # Night overlay
@@ -598,12 +599,10 @@ def main():
             night_overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
             night_overlay.fill((0, 0, 40, 120))
             screen.blit(night_overlay, (0, 0))
-
-        font = pygame.font.SysFont(None, 32)
-        dn_text = font.render("Night" if is_night else "Day", True, (200, 200, 255) if is_night else (255, 255, 0))
+        dn_text = FONT_32.render("Night" if is_night else "Day", True, (200, 200, 255) if is_night else (255, 255, 0))
         screen.blit(dn_text, (SCREEN_WIDTH - 110, 5))
         clock_str = f"{hour:02d}:{minute:02d}"
-        clock_text = font.render(clock_str, True, (255, 255, 255))
+        clock_text = FONT_32.render(clock_str, True, (255, 255, 255))
         screen.blit(clock_text, (SCREEN_WIDTH // 2 - clock_text.get_width() // 2, 5))
 
         # Additional QoL HUD elements
@@ -613,7 +612,7 @@ def main():
             f"Auto-save in: {(AUTO_SAVE_INTERVAL - auto_save_timer) // FPS}s"
         ]
         for i, hint in enumerate(qol_hints):
-            text = font.render(hint, True, (200, 200, 200))
+            text = FONT_20.render(hint, True, (200, 200, 200))
             screen.blit(text, (10, SCREEN_HEIGHT - 70 + i * 20))
 
         # Controls popup
@@ -695,6 +694,13 @@ def main():
             running = False
 
     pygame.quit()
+
+# --- Font objects (performance: create once, reuse) ---
+FONT_28 = pygame.font.SysFont(None, 28)
+FONT_32 = pygame.font.SysFont(None, 32)
+FONT_36 = pygame.font.SysFont(None, 36)
+FONT_22 = pygame.font.SysFont(None, 22)
+FONT_20 = pygame.font.SysFont(None, 20)
 
 def draw_controls_popup(screen, SCREEN_WIDTH, SCREEN_HEIGHT):
     font = pygame.font.SysFont(None, 28)

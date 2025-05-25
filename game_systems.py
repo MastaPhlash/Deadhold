@@ -248,75 +248,89 @@ class CombatSystem:
 class MinimapSystem:
     def __init__(self, minimap_size=150):
         self.size = minimap_size
-        self.scale = 1
+        self.scale = 3  # 3x zoom: each minimap pixel = 3x3 world tiles
         self.surface = None
         self.update_counter = 0  # Only update every few frames
-        
+    
     def initialize(self, MAP_WIDTH, MAP_HEIGHT):
-        self.scale = max(MAP_WIDTH // self.size, MAP_HEIGHT // self.size, 1)
-        minimap_w = MAP_WIDTH // self.scale
-        minimap_h = MAP_HEIGHT // self.scale
+        minimap_w = self.size
+        minimap_h = self.size
         self.surface = pygame.Surface((minimap_w, minimap_h))
-        
+    
     def update(self, MAP_WIDTH, MAP_HEIGHT, colonist, zombies, walls, trees, rocks):
-        if not self.surface:
-            return
-        
-        # Only update minimap every 5 frames for performance
+        # Store latest state for draw()
+        self.last_map_width = MAP_WIDTH
+        self.last_map_height = MAP_HEIGHT
+        self.last_colonist = colonist
+        self.last_zombies = zombies
+        self.last_walls = walls
+        self.last_trees = trees
+        self.last_rocks = rocks
+        # No need to update self.surface anymore (draw handles rendering)
         self.update_counter += 1
-        if self.update_counter % 5 != 0:
-            return
-            
-        self.surface.fill((20, 40, 20))
-        
-        # Batch set pixels for better performance
-        pixels_to_set = []
-        
-        # Draw terrain features
-        for tree in trees:
-            if not tree.cut_down:
-                px, py = tree.x // self.scale, tree.y // self.scale
-                if 0 <= px < self.surface.get_width() and 0 <= py < self.surface.get_height():
-                    pixels_to_set.append(((px, py), (0, 150, 0)))
-                    
-        for rock in rocks:
-            if not rock.mined:
-                px, py = rock.x // self.scale, rock.y // self.scale
-                if 0 <= px < self.surface.get_width() and 0 <= py < self.surface.get_height():
-                    pixels_to_set.append(((px, py), (100, 100, 100)))
-                    
-        for wall in walls:
-            px, py = wall.x // self.scale, wall.y // self.scale
-            if 0 <= px < self.surface.get_width() and 0 <= py < self.surface.get_height():
-                pixels_to_set.append(((px, py), (120, 120, 120)))
-        
-        # Draw zombies (only nearby ones for performance)
-        nearby_zombies = [z for z in zombies if abs(z.x - colonist.x) < 50 and abs(z.y - colonist.y) < 50]
-        for zombie in nearby_zombies:
-            px, py = zombie.x // self.scale, zombie.y // self.scale
-            if 0 <= px < self.surface.get_width() and 0 <= py < self.surface.get_height():
-                pixels_to_set.append(((px, py), (200, 0, 0)))
-                
-        # Set all pixels at once
-        for pos, color in pixels_to_set:
-            self.surface.set_at(pos, color)
-        
-        # Draw colonist last (always on top)
-        cx, cy = colonist.x // self.scale, colonist.y // self.scale
-        if 0 <= cx < self.surface.get_width() and 0 <= cy < self.surface.get_height():
-            self.surface.set_at((cx, cy), (0, 255, 0))
+        # Optionally, skip some updates for performance
+        # if self.update_counter % 5 != 0:
+        #     return
+        # self.surface.fill((20, 40, 20))
+        # ...old code removed...
 
     def draw(self, screen, SCREEN_WIDTH, SCREEN_HEIGHT, position="topright"):
         if self.surface:
+            # --- Begin new zoomed minimap scaling logic ---
+            # The minimap surface is always self.size x self.size
+            # But the zoomed-in area (view) is smaller, then scaled up to fill the minimap
+            view_size = self.size // self.scale  # e.g. 150//3 = 50
+            if view_size < 1:
+                view_size = 1
+            # Create a temp surface for the zoomed-in area
+            temp_surface = pygame.Surface((view_size, view_size))
+            temp_surface.fill((20, 40, 20))
+            # Center view on colonist
+            colonist = getattr(self, 'last_colonist', None)
+            map_width = getattr(self, 'last_map_width', None)
+            map_height = getattr(self, 'last_map_height', None)
+            trees = getattr(self, 'last_trees', [])
+            rocks = getattr(self, 'last_rocks', [])
+            walls = getattr(self, 'last_walls', [])
+            zombies = getattr(self, 'last_zombies', [])
+            if colonist and map_width and map_height:
+                min_x = colonist.x - view_size // 2
+                min_y = colonist.y - view_size // 2
+                for px in range(view_size):
+                    for py in range(view_size):
+                        world_x = min(max(min_x + px, 0), map_width - 1)
+                        world_y = min(max(min_y + py, 0), map_height - 1)
+                        color = (20, 40, 20)
+                        for tree in trees:
+                            if not tree.cut_down and tree.x == world_x and tree.y == world_y:
+                                color = (0, 150, 0)
+                        for rock in rocks:
+                            if not rock.mined and rock.x == world_x and rock.y == world_y:
+                                color = (100, 100, 100)
+                        for wall in walls:
+                            if wall.x == world_x and wall.y == world_y:
+                                color = (120, 120, 120)
+                        for zombie in zombies:
+                            if zombie.x == world_x and zombie.y == world_y:
+                                color = (200, 0, 0)
+                        temp_surface.set_at((px, py), color)
+                # Draw colonist last (always on top, center)
+                colonist_px = view_size // 2
+                colonist_py = view_size // 2
+                if 0 <= colonist_px < view_size and 0 <= colonist_py < view_size:
+                    temp_surface.set_at((colonist_px, colonist_py), (0, 255, 0))
+            # Scale temp_surface to minimap size
+            scaled_surface = pygame.transform.scale(temp_surface, (self.size, self.size))
+            # Draw at correct position
             if position == "bottomright":
-                x = SCREEN_WIDTH - self.surface.get_width() - 10
-                y = SCREEN_HEIGHT - self.surface.get_height() - 10
+                x = SCREEN_WIDTH - self.size - 10
+                y = SCREEN_HEIGHT - self.size - 10
             else:
-                x = SCREEN_WIDTH - self.surface.get_width() - 10
+                x = SCREEN_WIDTH - self.size - 10
                 y = 10
-            screen.blit(self.surface, (x, y))
-            pygame.draw.rect(screen, (255, 255, 255), 
-                           (x-1, y-1, self.surface.get_width()+2, self.surface.get_height()+2), 1)
+            screen.blit(scaled_surface, (x, y))
+            pygame.draw.rect(screen, (255, 255, 255), (x-1, y-1, self.size+2, self.size+2), 1)
+            # --- End new minimap logic ---
 
 class ConstructionPlanningSystem:
     def __init__(self):
